@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event'
 import { http, HttpResponse } from 'msw'
 import { describe, expect, it } from 'vitest'
 
-import { API_BASE, fixtures } from '@/test/msw/handlers'
+import { API_BASE, TEST_TOKEN, fixtures } from '@/test/msw/handlers'
 import { server } from '@/test/msw/server'
 import { renderApp, seedSession } from '@/test/utils'
 
@@ -26,7 +26,7 @@ describe('AlbumDetail', () => {
     expect(await screen.findByRole('heading', { name: 'Holidays' })).toBeInTheDocument()
     expect(await screen.findByRole('img', { name: 'sunset.png' })).toHaveAttribute(
       'src',
-      `${API_BASE}/images/${fixtures.image.id}/file`,
+      `${API_BASE}/images/${fixtures.image.id}/file?token=${encodeURIComponent(TEST_TOKEN)}`,
     )
   })
 
@@ -66,7 +66,7 @@ describe('AlbumDetail', () => {
 
     expect(await screen.findByRole('img', { name: 'Processed sunset.png' })).toHaveAttribute(
       'src',
-      `${API_BASE}/files/processed/${fixtures.image.id}/grayscale-320x240.jpg`,
+      `${API_BASE}/files/processed/${fixtures.image.id}/grayscale-320x240.jpg?token=${encodeURIComponent(TEST_TOKEN)}`,
     )
   })
 
