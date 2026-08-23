@@ -43,6 +43,25 @@ async function main(): Promise<void> {
     await telemetry.shutdown()
   })
 
+  // `docker compose down` and Ctrl-C send these. Without a handler node kills
+  // the process outright, `onClose` never runs, and the pg pool is torn down
+  // by the OS mid-query instead of drained — plus the last telemetry batch is
+  // dropped. `once`, so a second signal during a slow drain still hard-kills.
+  for (const signal of ['SIGTERM', 'SIGINT'] as const) {
+    process.once(signal, () => {
+      app.log.info({ signal }, 'shutting down')
+      void app
+        .close()
+        .then(() => {
+          process.exit(0)
+        })
+        .catch((error: unknown) => {
+          app.log.error(error)
+          process.exit(1)
+        })
+    })
+  }
+
   try {
     await app.listen({ port: config.PORT, host: '0.0.0.0' })
   } catch (error) {
@@ -52,4 +71,12 @@ async function main(): Promise<void> {
   }
 }
 
-void main()
+// A bare `void main()` turned every boot failure into an unhandled rejection:
+// node then prints its own warning and a stack trace, burying the one line
+// that matters — `loadConfig()`'s "offending field(s): …". Boot errors happen
+// before the logger exists, so they go straight to stderr.
+main().catch((error: unknown) => {
+  const message = error instanceof Error ? error.message : String(error)
+  process.stderr.write(`api failed to start: ${message}\n`)
+  process.exit(1)
+})
