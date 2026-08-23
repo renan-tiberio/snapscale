@@ -172,6 +172,17 @@ Why queries live in `hooks/` and not `services/`: `services/` is "talk to the AP
 one line: *need data in a page → import the domain hook; need a new endpoint → add the
 function in `services/<domain>.ts`, consume it in `hooks/queries/use<Domain>.ts`.*
 
+### Browser APIs (`apps/web`) — always behind typed abstractions
+
+- **localStorage** only through `services/storage.ts`: one typed schema of storage
+  keys → value types, generic `getItem`/`setItem`/`removeItem` (JSON-safe; corrupt
+  values return `null` and are purged). No raw `localStorage.*` anywhere else.
+- **Events** only through `utils/events.ts` (typed `AppEventMap` emitter/subscriber
+  over CustomEvent — no string-literal event names at call sites) and the hooks
+  `useEventListener` (DOM) / `useAppEvent` (app events) with automatic cleanup.
+- Both fully inferred: `storage.getItem('session')` types without casts. Zero `any`,
+  zero `as Type` escapes (`as const`/`satisfies` allowed).
+
 ### Backend conventions (`apps/api` and every service)
 
 - Layering: `routes/` (Fastify plugins: schema + thin handlers) → `services/`

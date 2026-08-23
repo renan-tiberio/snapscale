@@ -26,6 +26,10 @@ Applied by every reviewer on top of standard quality/conformance lenses.
 - API: routes → services → repositories layering; zod schemas from
   `@snapscale/shared` are the single source (validation + types + OpenAPI).
 - Every new UI component: folder with component/types/stories/test/index.
+- Web: no raw `localStorage.*` outside `services/storage.ts`; no raw
+  `addEventListener` outside `hooks/useEventListener` / `utils/events.ts`;
+  custom events only through the typed AppEventMap emitter. Zero `any`, zero
+  `as Type` casts (`as const`/`satisfies` fine) in these layers.
 - Immutability, early returns, no magic numbers (MEDIUM).
 
 ## Git
