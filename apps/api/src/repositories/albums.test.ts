@@ -47,9 +47,49 @@ describe('albumsRepo', () => {
     await albumsRepo.create(database.db, { ownerId, name: 'Mine' })
     await albumsRepo.create(database.db, { ownerId: intruderId, name: 'Theirs' })
 
-    const mine = await albumsRepo.listByOwner(database.db, ownerId)
+    const mine = await albumsRepo.listPageByOwner(database.db, ownerId, { limit: 10, offset: 0 })
 
-    expect(mine.map((album) => album.name)).toEqual(['Mine'])
+    expect(mine.rows.map((album) => album.name)).toEqual(['Mine'])
+    expect(mine.total).toBe(1)
+  })
+
+  it('counts every album of the owner, not just the ones on the requested page', async () => {
+    for (const name of ['a', 'b', 'c', 'd', 'e']) {
+      await albumsRepo.create(database.db, { ownerId, name })
+    }
+    await albumsRepo.create(database.db, { ownerId: intruderId, name: 'theirs' })
+
+    const page = await albumsRepo.listPageByOwner(database.db, ownerId, { limit: 2, offset: 2 })
+
+    expect(page.rows).toHaveLength(2)
+    // The intruder's album must not inflate the count either.
+    expect(page.total).toBe(5)
+  })
+
+  it('returns an empty page with the real total when the offset is past the end', async () => {
+    await albumsRepo.create(database.db, { ownerId, name: 'only' })
+
+    const page = await albumsRepo.listPageByOwner(database.db, ownerId, { limit: 10, offset: 50 })
+
+    expect(page.rows).toEqual([])
+    expect(page.total).toBe(1)
+  })
+
+  it('keeps the newest-first order stable across pages — no album seen twice or skipped', async () => {
+    const names = ['first', 'second', 'third', 'fourth']
+    for (const name of names) {
+      // Distinct `created_at` values: the ordering key is a timestamp, and
+      // four inserts inside the same millisecond would make the page split
+      // arbitrary rather than deterministic.
+      await albumsRepo.create(database.db, { ownerId, name })
+      await new Promise((resolve) => setTimeout(resolve, 2))
+    }
+
+    const firstPage = await albumsRepo.listPageByOwner(database.db, ownerId, { limit: 2, offset: 0 })
+    const secondPage = await albumsRepo.listPageByOwner(database.db, ownerId, { limit: 2, offset: 2 })
+
+    expect(firstPage.rows.map((album) => album.name)).toEqual(['fourth', 'third'])
+    expect(secondPage.rows.map((album) => album.name)).toEqual(['second', 'first'])
   })
 
   it('findById is owner-scoped — another owner gets undefined', async () => {

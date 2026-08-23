@@ -183,6 +183,92 @@ describe('album routes (/albums)', () => {
     expect(response.json()).toMatchObject({ success: false, error: { code: ERROR_CODES.NOT_FOUND } })
   })
 
+  // --- GET /albums?page&limit (docs/03 §4: `meta { total, page, limit }`) ---
+
+  async function createAlbums(count: number): Promise<void> {
+    for (let index = 0; index < count; index += 1) {
+      const created = await createAlbum(ownerToken, { name: `album-${index}` })
+      expect(created.statusCode).toBe(200)
+      // Distinct `created_at` values so the newest-first page split is
+      // deterministic rather than dependent on insert timing.
+      await new Promise((resolve) => setTimeout(resolve, 2))
+    }
+  }
+
+  interface PagedEnvelope {
+    readonly data?: readonly AlbumBody[]
+    readonly meta?: { readonly total: number; readonly page: number; readonly limit: number }
+  }
+
+  it('carries meta { total, page, limit } on an unpaginated list', async () => {
+    await createAlbums(3)
+
+    const response = await app.inject({ method: 'GET', url: '/albums', headers: authHeader(ownerToken) })
+
+    expect(response.statusCode).toBe(200)
+    const body = response.json() as PagedEnvelope
+    expect(body.data).toHaveLength(3)
+    expect(body.meta).toEqual({ total: 3, page: 1, limit: 20 })
+  })
+
+  it('splits the list across pages without repeating or skipping an album', async () => {
+    await createAlbums(5)
+
+    const firstPage = (
+      await app.inject({ method: 'GET', url: '/albums?page=1&limit=2', headers: authHeader(ownerToken) })
+    ).json() as PagedEnvelope
+    const lastPage = (
+      await app.inject({ method: 'GET', url: '/albums?page=3&limit=2', headers: authHeader(ownerToken) })
+    ).json() as PagedEnvelope
+
+    expect(firstPage.data?.map((album) => album.name)).toEqual(['album-4', 'album-3'])
+    expect(firstPage.meta).toEqual({ total: 5, page: 1, limit: 2 })
+    expect(lastPage.data?.map((album) => album.name)).toEqual(['album-0'])
+    expect(lastPage.meta).toEqual({ total: 5, page: 3, limit: 2 })
+  })
+
+  it('returns an empty page past the end while still reporting the real total', async () => {
+    await createAlbums(2)
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/albums?page=9&limit=2',
+      headers: authHeader(ownerToken),
+    })
+
+    const body = response.json() as PagedEnvelope
+    expect(response.statusCode).toBe(200)
+    expect(body.data).toEqual([])
+    expect(body.meta).toEqual({ total: 2, page: 9, limit: 2 })
+  })
+
+  it('counts only the caller\'s albums in meta.total', async () => {
+    await createAlbums(2)
+    await createAlbum(intruderToken, { name: 'theirs' })
+
+    const body = (
+      await app.inject({ method: 'GET', url: '/albums', headers: authHeader(ownerToken) })
+    ).json() as PagedEnvelope
+
+    expect(body.meta?.total).toBe(2)
+  })
+
+  it.each([
+    ['?limit=1000', 'a limit above the cap'],
+    ['?page=0', 'a zero page'],
+    ['?limit=0', 'a zero limit'],
+    ['?page=abc', 'a non-numeric page'],
+  ])('rejects %s (%s) with 422 VALIDATION_ERROR', async (query) => {
+    const response = await app.inject({
+      method: 'GET',
+      url: `/albums${query}`,
+      headers: authHeader(ownerToken),
+    })
+
+    expect(response.statusCode).toBe(422)
+    expect(response.json()).toMatchObject({ success: false, error: { code: ERROR_CODES.VALIDATION_ERROR } })
+  })
+
   it('documents album routes at /docs/json', async () => {
     const response = await app.inject({ method: 'GET', url: '/docs/json' })
     const document = response.json() as { paths: Record<string, unknown> }
