@@ -114,9 +114,12 @@ MailHog → login → create album → upload image → process image → see re
    env var exits non-zero with a clear message; `/docs/json` returns a spec containing
    every registered route.
 5. **DB layer** — migration runner + repository pattern for users/albums/images.
-   Integration tests run against the real compose Postgres (no mocked DB).
-   *Validate*: `turbo run test:integration --filter=api` green; migrations are
-   re-runnable (idempotent up on a fresh volume).
+   Integration tests run against a real Postgres (no mocked DB).
+   *Validate*: `turbo run test --filter=api` green — integration specs are folded into
+   the plain `test` task, each spun up against its own Testcontainers Postgres rather
+   than a shared compose instance (`05-decision-log.md` #11; superseded the
+   compose-Postgres / separate `test:integration` task originally planned here);
+   migrations are re-runnable (idempotent up on a fresh volume).
 6. **OTP auth** — `POST /auth/request-otp` (create code, email it via nodemailer →
    MailHog), `POST /auth/verify-otp` (exchange code for token). Codes: single-use,
    expiring, rate-limited per email.
@@ -129,7 +132,7 @@ MailHog → login → create album → upload image → process image → see re
    image metadata rows, list per album.
    *Validate*: integration tests cover create/list/get/delete + upload happy path and
    rejection paths (wrong mime, too large).
-9. **Heavy route** — `POST /images/:id/process` with `sharp` (resize + filter presets
+9. **Heavy route** — `POST /images/process` with `sharp` (resize + filter presets
    from `packages/shared`). Synchronous on purpose — this is the future culprit.
    *Validate*: red-first test with a small fixture image asserts output dimensions +
    format; a concurrency smoke test (10 parallel calls) documents baseline latency in
@@ -151,7 +154,7 @@ MailHog → login → create album → upload image → process image → see re
     Vite build (plugin listed, dev overlay shows compiled components).
 12. **E2E + coverage gate** — Playwright full journey (reads OTP from MailHog HTTP
     API); coverage thresholds (80%) turned on for api, web, shared — build fails below.
-    *Validate*: `turbo run e2e` green against compose; deliberately dropping a test
+    *Validate*: `turbo run test:e2e` green against compose; deliberately dropping a test
     file makes the coverage gate fail (proof the gate bites).
 
 ### Phase risks
@@ -166,7 +169,7 @@ MailHog → login → create album → upload image → process image → see re
 
 ## Phase 2 — Observability (`phase-2-observability`)
 
-**Goal**: Make the invisible visible — dashboards prove `/images/:id/process` is the
+**Goal**: Make the invisible visible — dashboards prove `/images/process` is the
 route degrading everything.
 **Exit criterion**: Grafana dashboard (screenshot in `docs/evidence/phase-2/`) shows,
 under k6 mixed load: process-route p95 exploding, CPU saturated, and *other* routes'
@@ -197,8 +200,23 @@ latency dragged down with it; `findings.md` names the culprit with numbers.
    around to rebuild it.
 4. **k6 scenarios** — `baseline.js` (CRUD only) and `mixed.js` (CRUD + process at
    realistic ratio), ramp-up stages, thresholds exported to JSON summary.
+
+   **Idempotency trap (read before writing `mixed.js`)** — `POST /images/process` is
+   idempotent by design (`apps/api/src/services/image-processing.ts:145-147`): a repeat
+   request with the *same* `(imageId, width, height, filter, quality)` short-circuits on
+   the unique `(image_id, params_hash)` lookup and returns the stored row without
+   touching `sharp` again. That is correct behavior, not a bug — but it means a k6
+   script that hits the route with one fixed image/params combination measures a
+   Postgres index lookup, not the CPU-bound `sharp` work this whole phase exists to
+   expose. **`mixed.js` must vary `width`/`height`/`filter`/`quality` per iteration**
+   (e.g. derived from the VU/iteration number) so each request misses the cache and
+   actually runs sharp; alternatively, add a `nocache` flag to the route/service (mirror
+   phase 8's cache-bypass flag, `03-technical-design.md` §10 risk note) for load-test
+   use. Skipping this makes the phase's central measurement invalid without failing
+   loudly — the dashboard would show a suspiciously *healthy* process route.
    *Validate*: both run clean against compose; summaries land in
-   `docs/evidence/phase-2/`.
+   `docs/evidence/phase-2/`; `mixed.js` demonstrably varies params per iteration (or
+   passes `nocache`) — spot-check a handful of request bodies in the k6 run log.
 5. **The experiment** — run baseline, then mixed; capture dashboards; write
    `findings.md`: what saturated, what degraded collaterally, why (event loop +
    CPU-bound work in-process).
@@ -428,8 +446,8 @@ becomes a new single point of failure (note HA options, accept locally).
 # Every phase, before merge:
 pnpm install
 turbo run lint typecheck
-turbo run test              # unit + integration, coverage ≥ 80% enforced
-turbo run e2e               # Playwright journey against the running stack
+turbo run test              # unit + integration (Testcontainers), coverage ≥ 80% enforced
+turbo run test:e2e          # Playwright journey against the running stack
 
 # Phases 1–3 (compose):
 docker compose up -d --build && docker compose ps
@@ -452,7 +470,9 @@ kubectl get hpa -w          # during load experiments
 - [ ] Open questions from the PRD resolved by ADRs at their phase start, never earlier.
 
 ---
-*Status: DRAFT.*
-
-**WAITING FOR CONFIRMATION** — no code is written until this plan is approved.
-Reply with approval, `modify: <changes>`, or a different approach.
+*Status: Phase 1 implemented — approved and executed (all 12 tasks landed on
+`phase-1-monolith`). Verification is in progress: the coverage/lint/typecheck gate and
+the Playwright E2E journey are the open item before the phase is called done. Exit-
+criterion evidence lands at `docs/evidence/phase-1/` when that gate is green; this
+status line updates to "complete" only then. Phases 2–9 remain DRAFT, pending approval
+at their own kickoff per the branch-per-phase workflow above.*

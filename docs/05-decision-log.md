@@ -262,6 +262,34 @@ album, image), and the hook-per-domain rule keeps data logic owned even without 
 layers. React Compiler adds a build-time dependency on its heuristics; Storybook is
 one more build to maintain.
 
+## 18. Scoped short-lived file token (`scope: 'file'`, 60s) — over a session token in the URL and XHR-to-blob
+
+**The problem**: the file-serving GET routes (`GET /images/:id/file`, `GET /files/*`)
+are rendered as `<img src="...">` in the browser, and an `<img>` tag cannot attach an
+`Authorization` header — some credential has to travel in the URL for those two routes.
+
+**Rejected alternatives**: the **1h session token in `?token=`** is what shipped first
+on these routes, and it was wrong on three counts: it is a full-API-authority
+credential, not scoped to file reads; pino logs the request URL, so the credential
+landed in structured logs; and it persists in browser history. **XHR-to-blob**
+(fetch the image with the Authorization header via `axios`/`fetch`, hand `<img src>` a
+blob URL instead) was rejected for complexity — every image becomes a stateful
+fetch-then-revoke lifecycle instead of a plain `<img>` tag, adding blob-URL
+memory-management surface for no proportionate gain in a lab.
+
+**Why**: `GET /auth/file-token` exchanges a valid `session` token (header only) for a
+second JWT scoped `scope: 'file'`, 60s expiry, carrying only `sub` — no `email`. Neither
+guard accepts the other scope: a `session` token is never accepted via `?token=`, and a
+`file` token is never accepted anywhere but the file-serving GETs' `?token=` fallback
+(`apps/api/src/plugins/auth-guard.ts`). `?token=` values are also redacted from pino
+request logs, closing the log-leak vector at its other end.
+
+**Trade-off accepted**: the token still travels in the URL — browser history and
+pre-redaction log exposure are reduced, not eliminated, by the 60s TTL and log
+redaction. The token is scoped per-user, not per-image: any `file`-scope token can
+address any file the issuing user owns, not just the one it was requested for — a known
+limitation, not a bug.
+
 ---
 
 *Additions to this log follow the same shape: decision, rejected alternatives, why, and

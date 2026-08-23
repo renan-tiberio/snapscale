@@ -51,12 +51,12 @@ snapscale/
 │   ├── otel/                 # instrumentation bootstrap (NodeSDK wrapper), one import per service
 │   ├── tsconfig/             # base tsconfig presets (base, node, react)
 │   └── eslint-config/        # shared lint rules
-├── infra/
-│   ├── compose/              # docker-compose.yml + per-profile overrides
-│   ├── prometheus/           # prometheus.yml (scrape configs)
-│   ├── grafana/              # provisioning/ (datasources, dashboards) + dashboards/*.json
-│   ├── k6/                   # load scenarios
+├── infra/                    # born phase 2 — empty in phase 1
+│   ├── prometheus/           # prometheus.yml (scrape configs) — phase 2
+│   ├── grafana/              # provisioning/ (datasources, dashboards) + dashboards/*.json — phase 2
+│   ├── k6/                   # load scenarios — phase 2
 │   └── k8s/                  # born phase 4 — manifests (kustomize overlays per phase)
+├── docker-compose.yml        # repo root — not `infra/compose/`; single file, no profiles (phase 1, what shipped)
 ├── docs/
 └── turbo.json
 ```
@@ -210,8 +210,14 @@ function in `services/<domain>.ts`, consume it in `hooks/queries/use<Domain>.ts`
 - Every service validates `process.env` at startup with a zod schema in `src/config.ts`;
   missing/invalid vars crash the process with the field name. No hardcoded secrets.
 - `.env.example` committed per app; real `.env` git-ignored; compose injects env vars.
-- Key vars (api): `DATABASE_URL`, `SMTP_HOST`, `SMTP_PORT`, `JWT_SECRET`,
-  `OTP_TTL_SECONDS=600`, `UPLOAD_DIR`, `OTEL_EXPORTER_PROMETHEUS_PORT=9464`.
+- Key vars (api, phase 1, shipped): `DATABASE_URL`, `SMTP_HOST`, `SMTP_PORT`,
+  `JWT_SECRET`, `OTP_TTL_SECONDS=600`, `UPLOAD_DIR`, `WEB_ORIGIN`, `OTEL_ENABLED`,
+  `OTEL_EXPORTER`, `OTEL_EXPORTER_OTLP_ENDPOINT` (see §8 — traces only, no metrics
+  pipeline yet).
+- `OTEL_EXPORTER_PROMETHEUS_PORT=9464` — **phase 2**, not a phase 1 var. No metrics
+  pipeline exists yet (§8); `packages/otel` in phase 1 only ever exports traces via
+  `OTEL_EXPORTER=console|otlp`. Listing it as shipped here was the divergence this
+  section fixes.
 
 ## 4. API contracts (phase 1 surface)
 
@@ -233,12 +239,14 @@ with them, web infers types from them (`z.infer`).
 |---|---|---|---|
 | `POST /auth/otp/request` | no | `{ email }` | `{ requested: true }` (idempotent; always 200 to avoid email enumeration) |
 | `POST /auth/otp/verify` | no | `{ email, code }` | `{ token, user }` |
-| `GET /auth/me` | yes | — | `{ user }` |
+| `GET /auth/me` | yes (`session`) | — | `{ user }` |
+| `GET /auth/file-token` | yes (`session`, header only) | — | `{ token }` — 60s `scope: 'file'` token; see §5 |
 | `GET /albums` · `POST /albums` | yes | list: `?page&limit` · create: `{ name, description? }` | `Album[]` · `Album` |
 | `GET /albums/:id` · `PATCH` · `DELETE` | yes | partial `{ name?, description? }` | `Album` · `Album` · `{}` |
 | `POST /images` | yes | multipart: file + `{ albumId }` | `Image` (metadata) |
 | `GET /images?albumId=` · `GET /images/:id` | yes | — | `Image[]` · `Image` |
-| `GET /images/:id/file` | yes | — | binary (original) |
+| `GET /images/:id/file` | yes (`session` header **or** `file` via `?token=`) | — | binary (original) |
+| `GET /files/*` | yes (`session` header **or** `file` via `?token=`) | wildcard storage path | binary (original or processed) |
 | `POST /images/process` | yes | `{ imageId, width, height, filter, quality? }` | `ProcessedImage` (**the heavy route**) |
 
 `POST /images/process` params (zod): `width`/`height` int 16–4096; `filter` enum
@@ -275,19 +283,42 @@ Session mechanism: **JWT (HS256), 1-hour expiry, no refresh token in MVP** — v
 - Web stores the token in `localStorage` (lab-acceptable; XSS trade-off noted — no
   third-party scripts in this app).
 
+### Scoped file tokens (`GET /auth/file-token`)
+
+The 1h session JWT is header-only by design — but the file-serving GET routes
+(`GET /images/:id/file`, `GET /files/*`) are rendered as `<img src="...">` in the
+browser, and an `<img>` tag has no way to attach an `Authorization` header. Something
+has to travel in the URL for those two routes.
+
+- **`GET /auth/file-token`** (requires a valid `session` token, header only) issues a
+  second, narrower JWT: `scope: 'file'`, 60s expiry, payload carries only `sub` (user
+  id) — no `email`. 60s is long enough for a page of `<img>` tags to load, short
+  enough that a leaked URL is worthless within a minute.
+- The two scopes are mutually exclusive by construction: `scope: 'session'` is the
+  only scope accepted on every normal route (header only — never via `?token=`);
+  `scope: 'file'` is accepted **only** on the file-serving GET routes' `?token=`
+  fallback, and nowhere else. Neither guard accepts the other's scope
+  (`apps/api/src/plugins/auth-guard.ts`).
+- Token values passed via `?token=` are redacted from pino request logs (the URL is
+  logged with the token replaced), so the log-leak vector that motivated this design is
+  closed at the logging layer too, not just by the short TTL.
+- **Known limitation**: the `file` scope is user-scoped, not per-image — a token
+  obtained for one image can address any file the same user owns, not just the one it
+  was requested for. Accepted trade-off; see `05-decision-log.md` #18.
+
 ## 6. Database schemas
 
-### api DB (`snapscale_api`) — phase 1
+### api DB (`snapscale`) — phase 1
 
 | Table | Columns (abridged) |
 |---|---|
 | `users` | `id uuid pk`, `email text unique`, `created_at` |
 | `otp_codes` | `id`, `email`, `code_hash`, `salt`, `attempts int default 0`, `expires_at`, `consumed_at nullable` |
-| `albums` | `id`, `user_id fk`, `name`, `description`, timestamps |
+| `albums` | `id`, `owner_id fk`, `name`, `description`, timestamps |
 | `images` | `id`, `album_id fk`, `owner_id fk`, `original_filename`, `storage_path`, `mime_type`, `size_bytes`, `width`, `height`, timestamps |
-| `processed_images` | `id`, `image_id fk`, `params jsonb` (width/height/filter/quality), `storage_path`, `duration_ms`, timestamps |
+| `processed_images` | `id`, `image_id fk`, `params_hash text`, `width int`, `height int`, `filter text`, `quality int` (discrete columns, not a `params jsonb` blob — unique on `(image_id, params_hash)`), `storage_path`, `duration_ms`, `created_at` |
 
-Migrations via drizzle-kit, committed under `apps/api/drizzle/`.
+Migrations via drizzle-kit, committed under `apps/api/migrations/` (not `apps/api/drizzle/`).
 
 ### processor DB (`snapscale_processor`) — born phase 3
 
@@ -341,9 +372,11 @@ startTelemetry({ serviceName: 'api' })
   prom-client** — one instrumentation API for metrics and traces, honoring the
   "instrumentation never swapped" principle; prom-client would be a second path to
   maintain and migrate.
-- Traces: OTLP/HTTP exporter → Jaeger `:4318`. Wired from day 1 but the exporter is
-  enabled by env flag (`OTEL_TRACES_ENABLED`) — off in phase 1–2 (nothing to receive),
-  on from phase 3.
+- Traces: OTLP/HTTP exporter → Jaeger `:4318`. Wired from day 1 but the whole SDK is
+  gated by one env flag (`OTEL_ENABLED`, `packages/otel/src/env.ts`) — off in phase 1–2
+  (nothing to receive), on from phase 3. When disabled, every OTel import is a *dynamic*
+  import that never runs, not merely "constructed but not started" — zero overhead by
+  default, not just an idle exporter.
 
 ### Metrics (RED, per route)
 
@@ -420,12 +453,17 @@ gate.
 
 ## 11. Local dev workflow
 
-- Compose profiles (`infra/compose/`): `core` = postgres + mailhog (phase 1);
-  `observability` = prometheus + grafana (+ jaeger from phase 3); `full` = everything.
-  `docker compose --profile core up -d` then `pnpm dev` (turbo runs api + web watch).
-- Root scripts: `pnpm dev`, `pnpm test`, `pnpm test:coverage`, `pnpm test:e2e`,
-  `pnpm lint`, `pnpm typecheck`, `pnpm compose:core`, `pnpm compose:full`,
-  `pnpm k6:baseline`, `pnpm k6:hot`.
+- Phase 1, shipped: a single root `docker-compose.yml` (not `infra/compose/`) with
+  postgres, mailhog, a one-shot `migrate` job, api, and web — no profiles;
+  `docker compose up -d --build` then, for local dev against the containerized deps,
+  `pnpm dev` (turbo runs api + web watch). Profile-based splitting
+  (`core`/`observability`/`full`) is a **phase 2+ plan, not shipped**: it lands once
+  `infra/prometheus`, `infra/grafana`, and Jaeger (phase 3) exist to make an
+  `observability` profile meaningful.
+- Root scripts (shipped, `package.json`): `pnpm dev`, `pnpm build`, `pnpm lint`,
+  `pnpm typecheck`, `pnpm test`, `pnpm test:coverage`, `pnpm test:e2e`.
+  `pnpm compose:core` / `compose:full` / `k6:baseline` / `k6:hot` do not exist yet —
+  **phase 2+ plan**, added alongside the compose profiles and `infra/k6/` above.
 - Phase 4 moves runtime to k3d (`infra/k8s/`), compose remains for the
   observability-only profile until those move too — split detailed in
   `04-implementation-plan.md`.
@@ -441,6 +479,7 @@ Choices the kickoff conversation left open, decided in this document:
 | Testcontainers for integration DB | Shared compose test-DB | Isolation per worker kills inter-test coupling — the main false-positive vector |
 | Drizzle ORM + drizzle-kit | Prisma / raw `pg` | SQL-transparent (learning goal: see the queries), typed, light runtime; Prisma hides SQL behind an engine; raw pg lacks a migration story |
 | localStorage for the web token | In-memory only | Survives refresh; XSS surface acceptable in a lab with no third-party scripts |
+| Scoped `file`-scope token (60s) for `<img>`-tag URLs, §5 | Session token in `?token=` (shipped first, then superseded); XHR-to-blob | Session token in a URL is logged, kept in browser history, and carries full API authority; XHR-to-blob adds a fetch/revoke lifecycle to every image. See `05-decision-log.md` #18 |
 
 Decided since (owned by the PRD, 2026-08-23): gateway is hand-rolled (`apps/gateway`,
 Fastify + `fastify-reply-from`); queue is RabbitMQ (AMQP, ack/prefetch/DLQ semantics,
