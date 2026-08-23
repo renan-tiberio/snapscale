@@ -15,6 +15,18 @@ const configSchema = z.object({
   OTP_TTL_SECONDS: z.coerce.number().int().positive().default(600),
   UPLOAD_DIR: z.string().min(1, 'UPLOAD_DIR is required'),
   WEB_ORIGIN: z.string().url().default('http://localhost:5173'),
+  // Mirrors the contract `@snapscale/otel#loadOtelEnv` enforces at telemetry
+  // boot (docs/03 §8) — kept here too so `Config` stays the one place that
+  // documents every env var this service reads. `startTelemetry()` runs
+  // before this schema is parsed (see src/index.ts), so the actual
+  // fail-fast-on-bad-value behavior lives in the otel package; these fields
+  // are optional with the same defaults for documentation/typing parity.
+  OTEL_ENABLED: z
+    .string()
+    .optional()
+    .transform((value) => value === 'true'),
+  OTEL_EXPORTER: z.enum(['console', 'otlp']).default('console'),
+  OTEL_EXPORTER_OTLP_ENDPOINT: z.string().url().optional(),
 })
 
 export type Config = z.infer<typeof configSchema>

@@ -21,6 +21,7 @@
     "@fastify/rate-limit": "11.2.0",
     "@fastify/swagger": "9.8.1",
     "@fastify/swagger-ui": "6.1.1",
+    "@snapscale/otel": "workspace:*",
     "@snapscale/shared": "workspace:*",
     "drizzle-orm": "0.45.2",
     "fastify": "5.12.1",

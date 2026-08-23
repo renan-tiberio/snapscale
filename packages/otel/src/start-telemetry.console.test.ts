@@ -15,7 +15,7 @@ describe('startTelemetry — enabled, console exporter', () => {
     // ConsoleSpanExporter prints one line per span via `console.dir` (see
     // @opentelemetry/sdk-trace's ConsoleSpanExporter) — spying on it is an
     // observable-behavior assertion, not an internal of startTelemetry.
-    const consoleDirSpy = vi.spyOn(console, 'dir').mockImplementation(() => {})
+    const consoleDirSpy = vi.spyOn(console, 'dir').mockImplementation(() => undefined)
 
     handle = await startTelemetry(
       { serviceName: 'snapscale-otel-test' },
