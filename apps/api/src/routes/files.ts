@@ -8,6 +8,7 @@ import type { Database } from '@/db/index.js'
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod'
 
 import { FileAccessError, resolveOwnedFile } from '@/services/file-access.js'
+import { FILE_CACHE_CONTROL } from '@/services/storage.js'
 
 export interface FileRoutesDeps {
   readonly db: Database
@@ -56,6 +57,15 @@ export function fileRoutes(deps: FileRoutesDeps): FastifyPluginAsyncZod {
             request.user.id,
           )
           reply.header('content-type', file.mimeType)
+          // `?token=` rotates every 60s, the bytes never change. Without a
+          // validator every rotation re-downloads every image on the page;
+          // with one it costs a 304. `private` keeps the response out of any
+          // shared cache — it belongs to exactly one account.
+          reply.header('cache-control', FILE_CACHE_CONTROL)
+          reply.header('etag', file.etag)
+          if (request.headers['if-none-match'] === file.etag) {
+            return reply.code(304).send()
+          }
           // Explicit 200 keeps the zod type provider from serializing this
           // binary reply against one of the declared error schemas.
           return reply.code(200).send(createReadStream(file.absolutePath))

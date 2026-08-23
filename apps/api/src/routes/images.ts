@@ -8,6 +8,7 @@ import type { Database } from '@/db/index.js'
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod'
 
 import { ImageServiceError, getImage, getImageFile, listImagesForAlbum, uploadImage } from '@/services/images.js'
+import { FILE_CACHE_CONTROL } from '@/services/storage.js'
 
 export interface ImageRoutesDeps {
   readonly db: Database
@@ -248,6 +249,13 @@ export function imageRoutes(deps: ImageRoutesDeps): FastifyPluginAsyncZod {
             request.user.id,
           )
           reply.header('content-type', file.mimeType)
+          // Same validator/caching contract as `GET /files/*` — see
+          // `services/storage.ts`.
+          reply.header('cache-control', FILE_CACHE_CONTROL)
+          reply.header('etag', file.etag)
+          if (request.headers['if-none-match'] === file.etag) {
+            return reply.code(304).send()
+          }
           // No response schema is declared for 200 (binary body, not an
           // envelope) — the explicit `code(200)` keeps the zod type
           // provider from picking one of the declared error schemas for

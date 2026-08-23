@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto'
 import {
   ALLOWED_IMAGE_MIME_TYPES,
   ERROR_CODES,
-  MAX_UPLOAD_BYTES,
+  imageUploadConstraintsSchema,
   type AllowedImageMimeType,
   type Image as ApiImage,
 } from '@snapscale/shared'
@@ -11,10 +11,17 @@ import sharp from 'sharp'
 
 import type { Database } from '@/db/index.js'
 import type { Image as ImageRow } from '@/repositories/images.js'
+import type { ZodIssue } from 'zod'
 
 import * as albumsRepo from '@/repositories/albums.js'
 import * as imagesRepo from '@/repositories/images.js'
-import { resolveUploadPath, writeUploadedFile } from '@/services/storage.js'
+import {
+  buildFileETag,
+  removeUploadedFile,
+  resolveUploadPath,
+  statUploadedFile,
+  writeUploadedFile,
+} from '@/services/storage.js'
 
 /**
  * Thrown by this module; routes map `code` 1:1 onto the HTTP error envelope
@@ -28,6 +35,20 @@ export class ImageServiceError extends Error {
     super(message)
     this.name = 'ImageServiceError'
     this.code = code
+  }
+}
+
+/**
+ * A persisted row violates an invariant the write path is supposed to
+ * guarantee — `mime_type` outside the allowlist, or missing dimensions.
+ * Deliberately *not* an `ImageServiceError`: routes map that one onto
+ * 404/422, and a corrupt row is neither the caller's fault nor a missing
+ * resource. This has to reach the 500 branch.
+ */
+export class ImageRowIntegrityError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'ImageRowIntegrityError'
   }
 }
 
@@ -57,6 +78,22 @@ function isAllowedMimeType(value: string | undefined): value is AllowedImageMime
 }
 
 /**
+ * Turns the first `imageUploadConstraintsSchema` issue into the client-facing
+ * message. Zod's own text ("Invalid enum value. Expected 'image/jpeg' | …")
+ * would leak the schema shape and read nothing like the rest of the api, so
+ * the issue is mapped rather than forwarded.
+ */
+function uploadConstraintMessage(issue: ZodIssue | undefined, mimeType: string | undefined): string {
+  if (issue?.path[0] === 'mimeType') {
+    return `Unsupported content type: ${mimeType ?? 'unknown'}`
+  }
+  if (issue?.code === 'too_big') {
+    return 'File exceeds the maximum upload size'
+  }
+  return 'Uploaded file is empty'
+}
+
+/**
  * Maps the db row onto the api's `Image` contract (`packages/shared`).
  * `width`/`height` are nullable columns (pre-existing rows without them),
  * but every row this module creates always sets them — a `null` here means
@@ -64,7 +101,19 @@ function isAllowedMimeType(value: string | undefined): value is AllowedImageMime
  */
 function toApiImage(row: ImageRow): ApiImage {
   if (row.width === null || row.height === null) {
-    throw new Error(`imagesRepo row ${row.id} is missing width/height — expected uploadImage to set them`)
+    throw new ImageRowIntegrityError(
+      `imagesRepo row ${row.id} is missing width/height — expected uploadImage to set them`,
+    )
+  }
+
+  // `mime_type` is a plain `text` column: only the upload path enforces the
+  // allowlist, so casting the column straight to `AllowedImageMimeType` was
+  // an unchecked promise. Anything else — a migration, a future importer —
+  // could put a value there that the api's own `Image` contract forbids.
+  if (!isAllowedMimeType(row.mimeType)) {
+    throw new ImageRowIntegrityError(
+      `imagesRepo row ${row.id} has an unsupported mimeType ${row.mimeType} — outside the allowlist`,
+    )
   }
 
   return {
@@ -73,7 +122,7 @@ function toApiImage(row: ImageRow): ApiImage {
     ownerId: row.ownerId,
     originalFilename: row.originalFilename,
     storagePath: row.storagePath,
-    mimeType: row.mimeType as AllowedImageMimeType,
+    mimeType: row.mimeType,
     sizeBytes: row.sizeBytes,
     width: row.width,
     height: row.height,
@@ -109,16 +158,21 @@ export async function uploadImage(deps: ImageServiceDeps, input: UploadImageInpu
     throw new ImageServiceError(ERROR_CODES.NOT_FOUND, 'Album not found')
   }
 
-  if (!isAllowedMimeType(input.mimeType)) {
+  // The mime allowlist and the size cap are `imageUploadConstraintsSchema`
+  // (packages/shared) — the same schema the contract is documented and tested
+  // with, instead of a second hand-rolled copy of the same two rules that
+  // could drift from it.
+  const constraints = imageUploadConstraintsSchema.safeParse({
+    mimeType: input.mimeType,
+    sizeBytes: input.buffer.byteLength,
+  })
+  if (!constraints.success) {
     throw new ImageServiceError(
       ERROR_CODES.VALIDATION_ERROR,
-      `Unsupported content type: ${input.mimeType ?? 'unknown'}`,
+      uploadConstraintMessage(constraints.error.issues[0], input.mimeType),
     )
   }
-
-  if (input.buffer.byteLength > MAX_UPLOAD_BYTES) {
-    throw new ImageServiceError(ERROR_CODES.VALIDATION_ERROR, 'File exceeds the maximum upload size')
-  }
+  const mimeType = constraints.data.mimeType
 
   const metadata = await sharp(input.buffer)
     .metadata()
@@ -137,7 +191,7 @@ export async function uploadImage(deps: ImageServiceDeps, input: UploadImageInpu
   // the client declared. This is what actually stops an SVG (which can
   // carry `<script>`) uploaded with a spoofed `Content-Type: image/png`.
   const detectedMimeType = metadata.format ? FORMAT_MIME_TYPES[metadata.format] : undefined
-  if (!detectedMimeType || detectedMimeType !== input.mimeType) {
+  if (!detectedMimeType || detectedMimeType !== mimeType) {
     throw new ImageServiceError(
       ERROR_CODES.VALIDATION_ERROR,
       `File content does not match the declared content type (detected: ${metadata.format ?? 'unknown'})`,
@@ -145,24 +199,33 @@ export async function uploadImage(deps: ImageServiceDeps, input: UploadImageInpu
   }
 
   const imageId = randomUUID()
-  const extension = MIME_EXTENSIONS[input.mimeType]
+  const extension = MIME_EXTENSIONS[mimeType]
   const storagePath = `originals/${input.ownerId}/${imageId}.${extension}`
 
+  // The blob has to land first: `storagePath` is derived from the id, and the
+  // row must never point at bytes that are not there yet. That ordering means
+  // a failed insert leaves an orphan blob nothing references and nothing will
+  // ever collect — so the write is compensated explicitly.
   await writeUploadedFile(deps.uploadDir, storagePath, input.buffer)
 
-  const row = await imagesRepo.create(deps.db, {
-    id: imageId,
-    albumId: input.albumId,
-    ownerId: input.ownerId,
-    originalFilename: input.originalFilename,
-    mimeType: input.mimeType,
-    sizeBytes: input.buffer.byteLength,
-    storagePath,
-    width: metadata.width,
-    height: metadata.height,
-  })
+  try {
+    const row = await imagesRepo.create(deps.db, {
+      id: imageId,
+      albumId: input.albumId,
+      ownerId: input.ownerId,
+      originalFilename: input.originalFilename,
+      mimeType,
+      sizeBytes: input.buffer.byteLength,
+      storagePath,
+      width: metadata.width,
+      height: metadata.height,
+    })
 
-  return toApiImage(row)
+    return toApiImage(row)
+  } catch (error) {
+    await removeUploadedFile(deps.uploadDir, storagePath)
+    throw error
+  }
 }
 
 /** `GET /images?albumId=` — the album must belong to the caller, else 404. */
@@ -197,12 +260,19 @@ export async function getImage(deps: ImageServiceDeps, imageId: string, ownerId:
 export interface ImageFile {
   readonly absolutePath: string
   readonly mimeType: string
+  /** Validator for `If-None-Match`, so a rotated `?token=` costs a 304, not a re-download. */
+  readonly etag: string
 }
 
 /**
  * `GET /images/:id/file` — `imagesRepo.findById` isn't owner-scoped (docs/03
  * §7 repo API), so ownership is checked here; a mismatch and a missing row
  * throw the exact same error, keeping the route free of an ownership oracle.
+ *
+ * A row whose blob has vanished from disk gets that same 404: the file is
+ * `stat`ed here, before the route opens a stream, because a
+ * `createReadStream` failure only surfaces once the 200 headers are already
+ * on the wire.
  */
 export async function getImageFile(deps: ImageServiceDeps, imageId: string, ownerId: string): Promise<ImageFile> {
   const image = await imagesRepo.findById(deps.db, imageId)
@@ -210,8 +280,14 @@ export async function getImageFile(deps: ImageServiceDeps, imageId: string, owne
     throw new ImageServiceError(ERROR_CODES.NOT_FOUND, 'Image not found')
   }
 
+  const stats = await statUploadedFile(deps.uploadDir, image.storagePath)
+  if (!stats) {
+    throw new ImageServiceError(ERROR_CODES.NOT_FOUND, 'Image not found')
+  }
+
   return {
     absolutePath: resolveUploadPath(deps.uploadDir, image.storagePath),
     mimeType: image.mimeType,
+    etag: buildFileETag(stats),
   }
 }
