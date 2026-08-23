@@ -8,7 +8,7 @@ import type { App } from '@/app.js'
 import { buildApp } from '@/app.js'
 import { createMailer } from '@/services/mailer.js'
 import { createTestDatabase, truncateAll, type TestDatabase } from '~/test/db.js'
-import { startMailhog, waitForMessagesTo, type TestMailhog } from '~/test/mailhog.js'
+import { connectToMailhog, waitForMessagesTo, type TestMailhog } from '~/test/mailhog.js'
 
 const JWT_SECRET = 'test-jwt-secret-do-not-use-in-prod'
 const OTP_TTL_SECONDS = 600
@@ -49,7 +49,11 @@ describe('auth routes (/auth/otp/*)', () => {
   let app: App
 
   beforeAll(async () => {
-    ;[database, mailhog] = await Promise.all([createTestDatabase(), startMailhog()])
+    database = await createTestDatabase()
+    // Connects to the run's already-started MailHog container (see
+    // `test/global-setup.ts`) — cheap and synchronous, no container startup
+    // here, so nothing to race against sibling test files.
+    mailhog = connectToMailhog()
 
     app = await buildApp({
       logger: false,
@@ -62,13 +66,22 @@ describe('auth routes (/auth/otp/*)', () => {
   }, 60_000)
 
   afterAll(async () => {
-    await app.close()
-    await mailhog.stop()
-    await database.destroy()
+    // FIX-E: a `beforeAll` failure (e.g. the MailHog/db setup above) can
+    // leave `app` (or `database`) unassigned; tearing down unconditionally
+    // used to throw `Cannot read properties of undefined (reading 'close')`
+    // here and bury the real startup error under this one. Guard so the
+    // original failure stays the reported cause.
+    if (app) {
+      await app.close()
+    }
+    if (database) {
+      await database.destroy()
+    }
   })
 
   beforeEach(async () => {
     await truncateAll(database)
+    await mailhog.purge()
   })
 
   async function requestOtpCode(email: string): Promise<string> {

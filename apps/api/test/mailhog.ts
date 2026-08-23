@@ -1,13 +1,20 @@
-import { GenericContainer, Wait, type StartedTestContainer } from 'testcontainers'
+import { inject } from 'vitest'
+
+import type { MailhogConnection } from './mailhog-container.js'
 
 /**
- * Real MailHog in a throwaway container per test file — random mapped ports
- * so the suite never depends on (or collides with) the compose instance on
- * 1025/8025 (`docs/05-decision-log.md` decision 11, extended here to email).
+ * Test-file-side access to the run's single MailHog container started by
+ * `global-setup.ts` (via `./mailhog-container.ts`). This file, unlike that
+ * one, is fine importing `vitest` (`inject`) — test files run in vitest's
+ * normal worker context, not the separate `globalSetup` context.
  */
-const MAILHOG_IMAGE = 'mailhog/mailhog:v1.0.1'
-const SMTP_PORT = 1025
-const HTTP_PORT = 8025
+
+declare module 'vitest' {
+  interface ProvidedContext {
+    /** Connection info for the run's one throwaway MailHog container. */
+    mailhogConnection: MailhogConnection
+  }
+}
 
 export interface MailhogMessage {
   readonly to: readonly string[]
@@ -20,7 +27,8 @@ export interface TestMailhog {
   readonly smtpPort: number
   /** Messages currently in the inbox whose `To` header contains `email`. */
   fetchMessagesTo: (email: string) => Promise<MailhogMessage[]>
-  stop: () => Promise<void>
+  /** Empties the inbox — call between tests so one test never sees another's mail. */
+  purge: () => Promise<void>
 }
 
 interface RawMailhogItem {
@@ -45,26 +53,26 @@ function toMessage(item: RawMailhogItem): MailhogMessage {
   }
 }
 
-export async function startMailhog(): Promise<TestMailhog> {
-  const container: StartedTestContainer = await new GenericContainer(MAILHOG_IMAGE)
-    .withExposedPorts(SMTP_PORT, HTTP_PORT)
-    .withWaitStrategy(Wait.forListeningPorts())
-    .start()
-
-  const host = container.getHost()
-  const httpPort = container.getMappedPort(HTTP_PORT)
+/**
+ * Connects a test file to the run's already-started MailHog container
+ * (provided by `global-setup.ts`). Cheap and synchronous — no container
+ * lifecycle here; call `purge()` between tests for isolation instead.
+ */
+export function connectToMailhog(): TestMailhog {
+  const { host, smtpPort, httpPort } = inject('mailhogConnection')
   const apiUrl = `http://${host}:${httpPort}/api/v2/messages`
+  const deleteUrl = `http://${host}:${httpPort}/api/v1/messages`
 
   return {
     smtpHost: host,
-    smtpPort: container.getMappedPort(SMTP_PORT),
+    smtpPort,
     fetchMessagesTo: async (email) => {
       const response = await fetch(apiUrl)
       const body = (await response.json()) as RawMailhogList
       return body.items.map(toMessage).filter((message) => message.to.includes(email))
     },
-    stop: async () => {
-      await container.stop()
+    purge: async () => {
+      await fetch(deleteUrl, { method: 'DELETE' })
     },
   }
 }
