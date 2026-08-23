@@ -1,3 +1,19 @@
+# Shared api runtime env — used by both the `api` service and the one-shot
+# `migrate` job so they can never drift apart. Hosts are compose-internal
+# service names (`postgres`, `mailhog`), unlike apps/api/.env.example which
+# points at the host-mapped ports for local `pnpm dev`.
+x-api-env: &api-env
+  PORT: "4000"
+  DATABASE_URL: postgres://snapscale:snapscale@postgres:5432/snapscale
+  SMTP_HOST: mailhog
+  SMTP_PORT: "1025"
+  JWT_SECRET: change-me-in-every-environment
+  OTP_TTL_SECONDS: "600"
+  UPLOAD_DIR: ./data/uploads
+  # Browser origin allowed to call the api — the browser talks to the
+  # host-mapped web port, never a compose-internal hostname.
+  WEB_ORIGIN: http://localhost:5173
+
 services:
   postgres:
     image: postgres:16-alpine
@@ -24,5 +40,67 @@ services:
       interval: 5s
       retries: 10
 
+  # One-shot: applies pending Drizzle migrations, then exits. Targets the
+  # `build` stage of the api image (full workspace, devDependencies, tsx —
+  # not the pruned `runtime` stage) so it can run scripts/migrate.ts
+  # directly via `pnpm exec`, reusing the exact command `pnpm db:migrate`
+  # runs locally instead of duplicating migration logic into an entrypoint
+  # script. Kept as its own service (rather than baked into the api
+  # container's CMD) so a migration failure surfaces as its own failed
+  # service in `docker compose up` output, and `api` simply waits on it.
+  migrate:
+    build:
+      context: ./apps/api
+      dockerfile: Dockerfile
+      additional_contexts:
+        - workspace=.
+      target: build
+    command: ["pnpm", "--filter", "@snapscale/api", "exec", "tsx", "scripts/migrate.ts"]
+    environment:
+      <<: *api-env
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  api:
+    build:
+      context: ./apps/api
+      dockerfile: Dockerfile
+      additional_contexts:
+        - workspace=.
+    ports:
+      - "4000:4000"
+    environment:
+      <<: *api-env
+    volumes:
+      - api_uploads:/app/apps/api/data/uploads
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mailhog:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+
+  web:
+    build:
+      context: ./apps/web
+      dockerfile: Dockerfile
+      additional_contexts:
+        - workspace=.
+      args:
+        # Vite inlines this at BUILD time. It must be the browser-facing,
+        # host-mapped origin (http://localhost:4000) — NOT the
+        # compose-internal `api:4000` hostname, because this URL is read
+        # by JS running in the user's browser, outside the compose
+        # network, not by another container.
+        VITE_API_URL: http://localhost:4000
+    ports:
+      - "5173:5173"
+    depends_on:
+      api:
+        condition: service_healthy
+
 volumes:
   pgdata:
+  api_uploads:
