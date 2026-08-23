@@ -51,8 +51,9 @@ describe('album routes (/albums)', () => {
     await truncateAll(database)
     ownerId = (await usersRepo.upsertByEmail(database.db, uniqueEmail('owner'))).id
     intruderId = (await usersRepo.upsertByEmail(database.db, uniqueEmail('intruder'))).id
-    ownerToken = await app.jwt.sign({ sub: ownerId, email: 'owner@example.com' })
-    intruderToken = await app.jwt.sign({ sub: intruderId, email: 'intruder@example.com' })
+    // `scope: 'session'` — the header guard now requires it explicitly (plugins/auth-guard.ts).
+    ownerToken = await app.jwt.sign({ sub: ownerId, email: 'owner@example.com', scope: 'session' })
+    intruderToken = await app.jwt.sign({ sub: intruderId, email: 'intruder@example.com', scope: 'session' })
   })
 
   function authHeader(token: string): Record<string, string> {

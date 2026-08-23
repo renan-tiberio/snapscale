@@ -42,6 +42,8 @@ describe('GET /files/* and query-token auth (docs/03 §4/§7)', () => {
   let intruderId: string
   let ownerToken: string
   let intruderToken: string
+  let ownerFileToken: string
+  let intruderFileToken: string
   let albumId: string
   let pngBuffer: Buffer
 
@@ -62,8 +64,13 @@ describe('GET /files/* and query-token auth (docs/03 §4/§7)', () => {
     await truncateAll(database)
     ownerId = (await usersRepo.upsertByEmail(database.db, uniqueEmail('owner'))).id
     intruderId = (await usersRepo.upsertByEmail(database.db, uniqueEmail('intruder'))).id
-    ownerToken = await app.jwt.sign({ sub: ownerId, email: 'owner@example.com' })
-    intruderToken = await app.jwt.sign({ sub: intruderId, email: 'intruder@example.com' })
+    // `scope: 'session'` — full-access tokens, header only (plugins/auth-guard.ts).
+    ownerToken = await app.jwt.sign({ sub: ownerId, email: 'owner@example.com', scope: 'session' })
+    intruderToken = await app.jwt.sign({ sub: intruderId, email: 'intruder@example.com', scope: 'session' })
+    // `scope: 'file'` — the short-lived, read-only tokens `?token=` now requires
+    // instead of a session token (the fix for the credential-in-URL finding).
+    ownerFileToken = await app.jwt.sign({ sub: ownerId, scope: 'file' })
+    intruderFileToken = await app.jwt.sign({ sub: intruderId, scope: 'file' })
     albumId = (await albumsRepo.create(database.db, { ownerId, name: 'Trip' })).id
   })
 
@@ -107,7 +114,7 @@ describe('GET /files/* and query-token auth (docs/03 §4/§7)', () => {
   it('serves an owned original file via ?token= — the <img>-tag path, no Authorization header sent', async () => {
     const image = await uploadImage(ownerToken)
 
-    const response = await app.inject({ method: 'GET', url: `/files/${image.storagePath}?token=${ownerToken}` })
+    const response = await app.inject({ method: 'GET', url: `/files/${image.storagePath}?token=${ownerFileToken}` })
 
     expect(response.statusCode).toBe(200)
     expect(response.headers['content-type']).toBe('image/png')
@@ -118,10 +125,26 @@ describe('GET /files/* and query-token auth (docs/03 §4/§7)', () => {
     const image = await uploadImage(ownerToken)
     const processed = await processImage(ownerToken, image.id)
 
-    const response = await app.inject({ method: 'GET', url: `/files/${processed.storagePath}?token=${ownerToken}` })
+    const response = await app.inject({
+      method: 'GET',
+      url: `/files/${processed.storagePath}?token=${ownerFileToken}`,
+    })
 
     expect(response.statusCode).toBe(200)
     expect(response.headers['content-type']).toBe('image/png')
+  })
+
+  it("rejects fetching another owner's file with a valid session Authorization header — no ownership oracle", async () => {
+    const image = await uploadImage(ownerToken)
+
+    const response = await app.inject({
+      method: 'GET',
+      url: `/files/${image.storagePath}`,
+      headers: { authorization: `Bearer ${intruderToken}` },
+    })
+
+    expect(response.statusCode).toBe(404)
+    expect(response.json()).toMatchObject({ success: false, error: { code: ERROR_CODES.NOT_FOUND } })
   })
 
   it('still accepts a normal Authorization header on /files/* (query token is a fallback, not exclusive)', async () => {
@@ -139,7 +162,7 @@ describe('GET /files/* and query-token auth (docs/03 §4/§7)', () => {
   it('also accepts ?token= on the existing GET /images/:id/file route', async () => {
     const image = await uploadImage(ownerToken)
 
-    const response = await app.inject({ method: 'GET', url: `/images/${image.id}/file?token=${ownerToken}` })
+    const response = await app.inject({ method: 'GET', url: `/images/${image.id}/file?token=${ownerFileToken}` })
 
     expect(response.statusCode).toBe(200)
     expect(Buffer.compare(response.rawPayload, pngBuffer)).toBe(0)
@@ -153,7 +176,7 @@ describe('GET /files/* and query-token auth (docs/03 §4/§7)', () => {
     // it happened to be `w` — the token stays valid and this test would pass
     // for the wrong reason (measured: 8.1% of 1000 signatures). A
     // mid-signature flip always changes the decoded bytes.
-    const [header, payload, signature = ''] = ownerToken.split('.')
+    const [header, payload, signature = ''] = ownerFileToken.split('.')
     const flipped = signature[10] === 'A' ? 'B' : 'A'
     const tampered = `${header}.${payload}.${signature.slice(0, 10)}${flipped}${signature.slice(11)}`
 
@@ -175,7 +198,10 @@ describe('GET /files/* and query-token auth (docs/03 §4/§7)', () => {
   it("rejects fetching another owner's file even with a valid token — no ownership oracle", async () => {
     const image = await uploadImage(ownerToken)
 
-    const response = await app.inject({ method: 'GET', url: `/files/${image.storagePath}?token=${intruderToken}` })
+    const response = await app.inject({
+      method: 'GET',
+      url: `/files/${image.storagePath}?token=${intruderFileToken}`,
+    })
 
     expect(response.statusCode).toBe(404)
     expect(response.json()).toMatchObject({ success: false, error: { code: ERROR_CODES.NOT_FOUND } })
@@ -184,7 +210,7 @@ describe('GET /files/* and query-token auth (docs/03 §4/§7)', () => {
   it('blocks a `../` path traversal attempt with 404, never escaping UPLOAD_DIR', async () => {
     const response = await app.inject({
       method: 'GET',
-      url: `/files/../../../../../../etc/passwd?token=${ownerToken}`,
+      url: `/files/../../../../../../etc/passwd?token=${ownerFileToken}`,
     })
 
     expect(response.statusCode).not.toBe(200)
@@ -194,10 +220,57 @@ describe('GET /files/* and query-token auth (docs/03 §4/§7)', () => {
   it('blocks a percent-encoded `../` traversal attempt with 404, never escaping UPLOAD_DIR', async () => {
     const response = await app.inject({
       method: 'GET',
-      url: `/files/..%2f..%2f..%2f..%2f..%2f..%2fetc%2fpasswd?token=${ownerToken}`,
+      url: `/files/..%2f..%2f..%2f..%2f..%2f..%2fetc%2fpasswd?token=${ownerFileToken}`,
     })
 
     expect(response.statusCode).not.toBe(200)
     expect([400, 404]).toContain(response.statusCode)
+  })
+
+  // --- FIX-TOKEN: scoped file tokens (docs/03 §4, credential-in-URL finding) ---
+
+  it('rejects a session-scoped token used as ?token= with 401 — the fix for the credential-in-URL finding', async () => {
+    const image = await uploadImage(ownerToken)
+
+    const response = await app.inject({ method: 'GET', url: `/files/${image.storagePath}?token=${ownerToken}` })
+
+    expect(response.statusCode).toBe(401)
+    expect(response.json()).toMatchObject({ success: false, error: { code: ERROR_CODES.UNAUTHORIZED } })
+  })
+
+  it('rejects a session-scoped token used as ?token= on GET /images/:id/file with 401', async () => {
+    const image = await uploadImage(ownerToken)
+
+    const response = await app.inject({ method: 'GET', url: `/images/${image.id}/file?token=${ownerToken}` })
+
+    expect(response.statusCode).toBe(401)
+    expect(response.json()).toMatchObject({ success: false, error: { code: ERROR_CODES.UNAUTHORIZED } })
+  })
+
+  it('rejects a file-scoped token presented in the Authorization header with 401', async () => {
+    const image = await uploadImage(ownerToken)
+
+    const response = await app.inject({
+      method: 'GET',
+      url: `/files/${image.storagePath}`,
+      headers: { authorization: `Bearer ${ownerFileToken}` },
+    })
+
+    expect(response.statusCode).toBe(401)
+    expect(response.json()).toMatchObject({ success: false, error: { code: ERROR_CODES.UNAUTHORIZED } })
+  })
+
+  it('rejects an expired file-scoped ?token= with 401', async () => {
+    const image = await uploadImage(ownerToken)
+    const expiredFileToken = await app.jwt.sign({ sub: ownerId, scope: 'file' }, { expiresIn: '1ms' })
+    await new Promise((resolve) => setTimeout(resolve, 10))
+
+    const response = await app.inject({
+      method: 'GET',
+      url: `/files/${image.storagePath}?token=${expiredFileToken}`,
+    })
+
+    expect(response.statusCode).toBe(401)
+    expect(response.json()).toMatchObject({ success: false, error: { code: ERROR_CODES.UNAUTHORIZED } })
   })
 })

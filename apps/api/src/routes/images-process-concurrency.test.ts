@@ -73,7 +73,8 @@ describe('POST /images/process — concurrency smoke', () => {
 
     await truncateAll(database)
     ownerId = (await usersRepo.upsertByEmail(database.db, uniqueEmail('owner'))).id
-    ownerToken = await app.jwt.sign({ sub: ownerId, email: 'owner@example.com' })
+    // `scope: 'session'` — the header guard now requires it explicitly (plugins/auth-guard.ts).
+    ownerToken = await app.jwt.sign({ sub: ownerId, email: 'owner@example.com', scope: 'session' })
     albumId = (await albumsRepo.create(database.db, { ownerId, name: 'Trip' })).id
   })
 
