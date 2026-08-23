@@ -147,7 +147,15 @@ describe('GET /files/* and query-token auth (docs/03 §4/§7)', () => {
 
   it('rejects a tampered query token with 401 UNAUTHORIZED', async () => {
     const image = await uploadImage(ownerToken)
-    const tampered = `${ownerToken.slice(0, -1)}${ownerToken.endsWith('x') ? 'y' : 'x'}`
+    // Tamper *inside* the signature, never at its last character: a 32-byte
+    // HMAC encodes to 43 base64url chars whose final char carries only 2
+    // significant bits, so replacing it yields the identical bytes whenever
+    // it happened to be `w` — the token stays valid and this test would pass
+    // for the wrong reason (measured: 8.1% of 1000 signatures). A
+    // mid-signature flip always changes the decoded bytes.
+    const [header, payload, signature = ''] = ownerToken.split('.')
+    const flipped = signature[10] === 'A' ? 'B' : 'A'
+    const tampered = `${header}.${payload}.${signature.slice(0, 10)}${flipped}${signature.slice(11)}`
 
     const response = await app.inject({ method: 'GET', url: `/files/${image.storagePath}?token=${tampered}` })
 

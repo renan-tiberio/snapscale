@@ -16,6 +16,7 @@ async function main(): Promise<void> {
     jwtSecret: config.JWT_SECRET,
     otpTtlSeconds: config.OTP_TTL_SECONDS,
     uploadDir: config.UPLOAD_DIR,
+    webOrigin: config.WEB_ORIGIN,
   })
 
   app.addHook('onClose', async () => {

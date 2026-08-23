@@ -1,3 +1,4 @@
+import fastifyCors from '@fastify/cors'
 import fastifyJwt from '@fastify/jwt'
 import fastifyMultipart from '@fastify/multipart'
 import fastifySwagger from '@fastify/swagger'
@@ -62,7 +63,16 @@ export interface BuildAppOptions {
    * same "pay only for what you configure" rule as the auth routes above.
    */
   uploadDir?: string
+  /**
+   * Origin allowed to call this api from a browser — the Vite dev server by
+   * default. Registered as an allowlist rather than an echo of whatever
+   * `Origin` arrives, so the header stays a control instead of decoration.
+   */
+  webOrigin?: string
 }
+
+/** Vite's dev server origin; the only browser client in phase 1. */
+const DEFAULT_WEB_ORIGIN = 'http://localhost:5173'
 
 /**
  * Builds (but does not start listening on) the Fastify app. Kept separate
@@ -76,6 +86,16 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<App> {
 
   app.setValidatorCompiler(validatorCompiler)
   app.setSerializerCompiler(serializerCompiler)
+
+  // Registered before any route so preflights are answered for all of them.
+  // The SPA and the api are separate origins (:5173 → :4000), so without
+  // this every browser call fails before it reaches a handler — invisible to
+  // `app.inject()`-based tests, which is why `cors.test.ts` exists.
+  await app.register(fastifyCors, {
+    origin: [options.webOrigin ?? DEFAULT_WEB_ORIGIN],
+    methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['content-type', 'authorization'],
+  })
 
   await app.register(fastifySwagger, {
     openapi: {

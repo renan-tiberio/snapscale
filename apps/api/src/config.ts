@@ -14,6 +14,7 @@ const configSchema = z.object({
   JWT_SECRET: z.string().min(1, 'JWT_SECRET is required'),
   OTP_TTL_SECONDS: z.coerce.number().int().positive().default(600),
   UPLOAD_DIR: z.string().min(1, 'UPLOAD_DIR is required'),
+  WEB_ORIGIN: z.string().url().default('http://localhost:5173'),
 })
 
 export type Config = z.infer<typeof configSchema>
