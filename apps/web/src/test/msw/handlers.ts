@@ -3,6 +3,8 @@ import { http, HttpResponse } from 'msw'
 
 import type { Album, Image, ProcessedImage, User } from '@snapscale/shared'
 
+import { createFileTokenWithTtlMs } from '@/test/jwt'
+
 /**
  * msw handlers implementing the phase-1 API surface of
  * `docs/03-technical-design.md` §4 — every response uses the shared envelope.
@@ -12,8 +14,14 @@ import type { Album, Image, ProcessedImage, User } from '@snapscale/shared'
 export const API_BASE = 'http://localhost:4000'
 
 export const TEST_TOKEN = 'test-session-token'
-/** The `scope: 'file'` token `GET /auth/file-token` hands back — see `hooks/queries/useFileToken.ts`. */
-export const TEST_FILE_TOKEN = 'test-file-token'
+/**
+ * The `scope: 'file'` token `GET /auth/file-token` hands back — see
+ * `hooks/queries/useFileToken.ts`. JWT-shaped with a real `exp` 60s out
+ * (matching the server-side TTL in `routes/file-token.ts`) since the hook
+ * decodes that claim to schedule its own refresh — a plain opaque string
+ * would make every decode-dependent spec meaningless.
+ */
+export const TEST_FILE_TOKEN = createFileTokenWithTtlMs(60_000)
 export const VALID_OTP = '123456'
 
 export const testUser: User = {

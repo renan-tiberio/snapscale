@@ -1,7 +1,7 @@
 import { ERROR_CODES, fail, ok } from '@snapscale/shared'
-import { screen } from '@testing-library/react'
+import { fireEvent, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { http, HttpResponse } from 'msw'
+import { delay, http, HttpResponse } from 'msw'
 import { describe, expect, it } from 'vitest'
 
 import { API_BASE, TEST_FILE_TOKEN, fixtures } from '@/test/msw/handlers'
@@ -115,5 +115,44 @@ describe('AlbumDetail', () => {
     renderAlbum()
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Album not found')
+  })
+
+  it('shows a placeholder instead of an image until the file token is ready', async () => {
+    server.use(
+      http.get(`${API_BASE}/auth/file-token`, async () => {
+        await delay(50)
+        return HttpResponse.json(ok({ token: TEST_FILE_TOKEN }))
+      }),
+    )
+
+    renderAlbum()
+
+    await screen.findByRole('heading', { name: 'Holidays' })
+    expect(screen.queryByRole('img', { name: 'sunset.png' })).not.toBeInTheDocument()
+
+    expect(await screen.findByRole('img', { name: 'sunset.png' })).toHaveAttribute(
+      'src',
+      `${API_BASE}/images/${fixtures.image.id}/file?token=${encodeURIComponent(TEST_FILE_TOKEN)}`,
+    )
+  })
+
+  it('requests a fresh file token when an image fails to load', async () => {
+    let fileTokenRequests = 0
+    server.use(
+      http.get(`${API_BASE}/auth/file-token`, () => {
+        fileTokenRequests += 1
+        return HttpResponse.json(ok({ token: TEST_FILE_TOKEN }))
+      }),
+    )
+
+    renderAlbum()
+    const img = await screen.findByRole('img', { name: 'sunset.png' })
+    const requestsBeforeError = fileTokenRequests
+
+    fireEvent.error(img)
+
+    await waitFor(() => {
+      expect(fileTokenRequests).toBeGreaterThan(requestsBeforeError)
+    })
   })
 })

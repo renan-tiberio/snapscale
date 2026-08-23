@@ -147,4 +147,21 @@ describe('http', () => {
 
     expect(readStoredSession()).toBeNull()
   })
+
+  it('ships with a bounded default timeout instead of axios\'s "never" default', () => {
+    expect(http.defaults.timeout).toBeGreaterThan(0)
+    expect(http.defaults.timeout).toBeLessThanOrEqual(30_000)
+  })
+
+  it('aborts a request that never gets a response instead of hanging forever', async () => {
+    server.use(mswHttp.get(`${API_BASE}/albums`, () => new Promise<never>(() => {})))
+    const originalTimeout = http.defaults.timeout
+    http.defaults.timeout = 50
+
+    try {
+      await expect(http.get('/albums')).rejects.toMatchObject({ code: ERROR_CODES.INTERNAL })
+    } finally {
+      http.defaults.timeout = originalTimeout
+    }
+  })
 })

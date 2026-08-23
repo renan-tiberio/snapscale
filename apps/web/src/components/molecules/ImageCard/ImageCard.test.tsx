@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 
@@ -56,5 +56,27 @@ describe('ImageCard', () => {
       'aria-pressed',
       'false',
     )
+  })
+
+  it('shows a placeholder instead of an image while no token is available yet', () => {
+    renderImageCard({ src: null })
+
+    expect(screen.queryByRole('img')).not.toBeInTheDocument()
+    expect(screen.getByRole('status', { name: 'Loading sunset.png' })).toBeInTheDocument()
+  })
+
+  it('shows a retry affordance and notifies the caller when the image fails to load', async () => {
+    const user = userEvent.setup()
+    const onImageError = vi.fn()
+    renderImageCard({ onImageError })
+
+    fireEvent.error(screen.getByRole('img', { name: 'sunset.png' }))
+
+    expect(onImageError).toHaveBeenCalledTimes(1)
+    expect(screen.queryByRole('img')).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /retry/i }))
+
+    expect(onImageError).toHaveBeenCalledTimes(2)
   })
 })

@@ -1,5 +1,5 @@
 import { IMAGE_FILTERS } from '@snapscale/shared'
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 
@@ -137,5 +137,20 @@ describe('ProcessImagePanel', () => {
     await user.click(screen.getByRole('button', { name: 'Close panel' }))
 
     expect(onClose).toHaveBeenCalledTimes(1)
+  })
+
+  it('shows a retry affordance and notifies the caller when the processed image fails to load', async () => {
+    const user = userEvent.setup()
+    const onImageError = vi.fn()
+    renderPanel({ resultUrl: 'http://localhost:4000/files/processed/img/abc.jpg', onImageError })
+
+    fireEvent.error(screen.getByRole('img', { name: 'Processed sunset.png' }))
+
+    expect(onImageError).toHaveBeenCalledTimes(1)
+    expect(screen.queryByRole('img')).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /retry/i }))
+
+    expect(onImageError).toHaveBeenCalledTimes(2)
   })
 })
