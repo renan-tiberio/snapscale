@@ -1,10 +1,10 @@
 import { ERROR_CODES, fail, ok } from '@snapscale/shared'
 import { screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { http, HttpResponse } from 'msw'
+import { delay, http, HttpResponse } from 'msw'
 import { describe, expect, it } from 'vitest'
 
-import { API_BASE } from '@/test/msw/handlers'
+import { API_BASE, fixtures } from '@/test/msw/handlers'
 import { server } from '@/test/msw/server'
 import { renderApp, seedSession } from '@/test/utils'
 
@@ -41,6 +41,31 @@ describe('Albums', () => {
     await waitFor(() => {
       expect(screen.queryByRole('link', { name: 'Holidays' })).not.toBeInTheDocument()
     })
+  })
+
+  it('only disables the album row being deleted, leaving the others enabled', async () => {
+    seedSession()
+    const user = userEvent.setup()
+    server.use(
+      http.delete(`${API_BASE}/albums/:id`, async ({ params }) => {
+        if (params.id === fixtures.album.id) {
+          await delay('infinite')
+        }
+        return HttpResponse.json(ok({}))
+      }),
+    )
+    renderApp(['/'])
+    await screen.findByRole('link', { name: 'Holidays' })
+
+    await user.click(screen.getByRole('button', { name: 'Delete Holidays' }))
+
+    const holidaysButton = await screen.findByRole('button', { name: 'Delete Holidays' })
+    expect(holidaysButton).toBeDisabled()
+    expect(holidaysButton).toHaveTextContent('Deleting…')
+
+    const workButton = screen.getByRole('button', { name: 'Delete Work' })
+    expect(workButton).toBeEnabled()
+    expect(workButton).toHaveTextContent('Delete')
   })
 
   it('opens the album when its card is followed', async () => {

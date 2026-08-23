@@ -83,6 +83,34 @@ describe('http', () => {
     await expect(http.get('/albums')).rejects.toMatchObject({ code: ERROR_CODES.INTERNAL })
   })
 
+  it('rejects with a typed ApiError carrying the code and message from a well-formed error envelope', async () => {
+    server.use(
+      mswHttp.get(`${API_BASE}/albums`, () =>
+        HttpResponse.json(fail(ERROR_CODES.VALIDATION_ERROR, 'name is required'), { status: 422 }),
+      ),
+    )
+
+    await expect(http.get('/albums')).rejects.toMatchObject({
+      code: ERROR_CODES.VALIDATION_ERROR,
+      message: 'name is required',
+      status: 422,
+    })
+  })
+
+  it.each([
+    ['a bare string', 'just-a-string'],
+    ['null', null],
+    ['an unrelated object shape', { weird: 1 }],
+  ])('falls back to a generic INTERNAL ApiError without throwing for garbage payload: %s', async (_label, payload) => {
+    server.use(mswHttp.get(`${API_BASE}/albums`, () => HttpResponse.json(payload, { status: 500 })))
+
+    await expect(http.get('/albums')).rejects.toMatchObject({
+      code: ERROR_CODES.INTERNAL,
+      message: 'Unexpected error while contacting the API',
+      status: 500,
+    })
+  })
+
   it('clears the stored session and broadcasts a logout on 401', async () => {
     seedStoredSession()
     const onLogout = vi.fn()
