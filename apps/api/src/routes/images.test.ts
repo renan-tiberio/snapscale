@@ -331,6 +331,88 @@ describe('image routes (/images)', () => {
     }
   })
 
+  // --- GET /images/:id — the entity, not the file (docs/03 §4) ---
+
+  it('gets one of the caller\'s images by id — the metadata entity, not the bytes', async () => {
+    const uploaded = (
+      await upload(ownerToken, { albumId }, { filename: 'sunset.png', contentType: 'image/png', data: pngBuffer })
+    ).json() as Envelope<ImageBody>
+    const imageId = uploaded.data?.id ?? ''
+
+    const response = await app.inject({
+      method: 'GET',
+      url: `/images/${imageId}`,
+      headers: authHeader(ownerToken),
+    })
+
+    expect(response.statusCode).toBe(200)
+    expect(response.headers['content-type']).toContain('application/json')
+    const body = response.json() as Envelope<ImageBody>
+    expect(body.data).toMatchObject({ id: imageId, albumId, ownerId, mimeType: 'image/png' })
+  })
+
+  it("returns 404 NOT_FOUND for another owner's image id on GET /images/:id", async () => {
+    const uploaded = (
+      await upload(ownerToken, { albumId }, { filename: 'sunset.png', contentType: 'image/png', data: pngBuffer })
+    ).json() as Envelope<ImageBody>
+
+    const response = await app.inject({
+      method: 'GET',
+      url: `/images/${uploaded.data?.id ?? ''}`,
+      headers: authHeader(intruderToken),
+    })
+
+    expect(response.statusCode).toBe(404)
+    expect(response.json()).toMatchObject({ success: false, error: { code: ERROR_CODES.NOT_FOUND } })
+  })
+
+  it('returns 404 NOT_FOUND for an unknown image id on GET /images/:id', async () => {
+    const response = await app.inject({
+      method: 'GET',
+      url: `/images/${randomUUID()}`,
+      headers: authHeader(ownerToken),
+    })
+
+    expect(response.statusCode).toBe(404)
+    expect(response.json()).toMatchObject({ success: false, error: { code: ERROR_CODES.NOT_FOUND } })
+  })
+
+  it('rejects GET /images/:id without a token with 401 UNAUTHORIZED', async () => {
+    const response = await app.inject({ method: 'GET', url: `/images/${randomUUID()}` })
+
+    expect(response.statusCode).toBe(401)
+    expect(response.json()).toMatchObject({ success: false, error: { code: ERROR_CODES.UNAUTHORIZED } })
+  })
+
+  it('documents GET /images/{id} at /docs/json', async () => {
+    const response = await app.inject({ method: 'GET', url: '/docs/json' })
+    const document = response.json() as { paths: Record<string, unknown> }
+
+    expect(document.paths).toHaveProperty('/images/{id}')
+  })
+
+  it('documents the multipart `file` and `albumId` fields of POST /images at /docs/json', async () => {
+    const response = await app.inject({ method: 'GET', url: '/docs/json' })
+    const document = response.json() as {
+      paths: Record<
+        string,
+        {
+          post?: {
+            requestBody?: {
+              content?: Record<string, { schema?: { properties?: Record<string, unknown> } }>
+            }
+          }
+        }
+      >
+    }
+
+    const properties =
+      document.paths['/images']?.post?.requestBody?.content?.['multipart/form-data']?.schema?.properties
+
+    expect(properties).toHaveProperty('file')
+    expect(properties).toHaveProperty('albumId')
+  })
+
   it('documents image routes at /docs/json', async () => {
     const response = await app.inject({ method: 'GET', url: '/docs/json' })
     const document = response.json() as { paths: Record<string, unknown> }
