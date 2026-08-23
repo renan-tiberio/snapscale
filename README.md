@@ -15,20 +15,33 @@ is in [`docs/05-decision-log.md`](docs/05-decision-log.md).
 
 ## Running it
 
-Requires Docker, Node 22 and pnpm.
+Requires Docker. Everything runs in containers — Postgres, MailHog, the migrations,
+the API and the web app:
+
+```bash
+docker compose up -d --build
+```
+
+That is the whole thing. Stop it with `docker compose down` (add `-v` to drop the
+database volume too).
+
+### Or run the apps from source
+
+For day-to-day work you usually want the API and the web app on your own machine, with
+watch mode, and only the infrastructure in Docker. Requires Node 22 and pnpm:
 
 ```bash
 pnpm install                              # once
-docker compose up -d                      # postgres + mailhog
+docker compose up -d postgres mailhog     # infrastructure only
 cp apps/api/.env.example apps/api/.env    # once
 pnpm --filter @snapscale/api db:migrate   # create the tables
-pnpm dev                                  # api + web
+pnpm dev                                  # api + web, watching
 ```
 
-Storybook runs separately: `pnpm --filter @snapscale/web storybook`.
+Pick one or the other — both bind the same ports (4000 and 5173), so running the full
+compose stack and `pnpm dev` at the same time will collide.
 
-Stopping: `Ctrl+C` on `pnpm dev`, then `docker compose down` (add `-v` to drop the
-database volume too).
+Storybook runs separately either way: `pnpm --filter @snapscale/web storybook`.
 
 ## Where each service lives
 
@@ -71,6 +84,14 @@ pnpm test           # unit + integration (Testcontainers spins real Postgres)
 pnpm typecheck
 pnpm lint
 pnpm test:coverage  # fails under 80%
+```
+
+The end-to-end journey runs against a stack that is already up (either way of starting
+it), because it exercises the same processes you are looking at rather than booting a
+second copy:
+
+```bash
+pnpm --filter @snapscale/e2e exec playwright test
 ```
 
 Tests are never deleted, skipped, or weakened to make a suite pass: a red test means
