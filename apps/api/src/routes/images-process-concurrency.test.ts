@@ -10,8 +10,8 @@ import type { App } from '@/app.js'
 import { buildApp } from '@/app.js'
 import * as albumsRepo from '@/repositories/albums.js'
 import * as usersRepo from '@/repositories/users.js'
-import { buildMultipartPayload, makeNoiseJpeg } from '~/test/fixtures.js'
 import { createTestDatabase, truncateAll, type TestDatabase } from '~/test/db.js'
+import { buildMultipartPayload, makeNoiseJpeg } from '~/test/fixtures.js'
 
 const JWT_SECRET = 'test-images-process-concurrency-secret'
 const PARALLEL_REQUESTS = 10

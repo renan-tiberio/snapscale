@@ -1,4 +1,4 @@
-import { desc, eq } from 'drizzle-orm'
+import { and, desc, eq } from 'drizzle-orm'
 
 import type { Database } from '@/db/index.js'
 
@@ -52,4 +52,23 @@ export async function listByAlbum(db: Database, albumId: string): Promise<Image[
 
 export async function findById(db: Database, id: string): Promise<Image | undefined> {
   return firstRow(await db.select().from(images).where(eq(images.id, id)).limit(1))
+}
+
+/**
+ * `GET /files/*` ownership check (docs/03 §7) for original files: ownership
+ * is part of the predicate itself, same reason as `albumsRepo.findById` — a
+ * wrong owner and a missing row are the same `undefined`, never an oracle.
+ */
+export async function findByStoragePathForOwner(
+  db: Database,
+  storagePath: string,
+  ownerId: string,
+): Promise<Image | undefined> {
+  return firstRow(
+    await db
+      .select()
+      .from(images)
+      .where(and(eq(images.storagePath, storagePath), eq(images.ownerId, ownerId)))
+      .limit(1),
+  )
 }

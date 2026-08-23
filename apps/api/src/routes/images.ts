@@ -13,6 +13,12 @@ export interface ImageRoutesDeps {
   readonly db: Database
   readonly uploadDir: string
   readonly authenticate: NonNullable<App['authenticate']>
+  /**
+   * Used only by `GET /images/:id/file`: browsers cannot attach an
+   * Authorization header to an `<img src>`, so that one read-only route also
+   * accepts `?token=` (docs/03 §4). Mutating routes keep the header-only guard.
+   */
+  readonly authenticateAllowingQueryToken: NonNullable<App['authenticateAllowingQueryToken']>
 }
 
 const errorEnvelopeSchema = z.object({
@@ -168,7 +174,7 @@ export function imageRoutes(deps: ImageRoutesDeps): FastifyPluginAsyncZod {
     fastify.get(
       '/images/:id/file',
       {
-        preHandler: deps.authenticate,
+        preHandler: deps.authenticateAllowingQueryToken,
         schema: {
           description: 'Streams the original image bytes — mine or 404, never an ownership oracle.',
           tags: ['images'],

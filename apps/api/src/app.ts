@@ -21,10 +21,17 @@ import {
 import type { Database } from '@/db/index.js'
 import type { Mailer } from '@/services/mailer.js'
 
-import { AuthenticationError, authGuardPlugin, createAuthenticateHandler } from '@/plugins/auth-guard.js'
+import {
+  AuthenticationError,
+  authGuardPlugin,
+  createAuthenticateAllowingQueryTokenHandler,
+  createAuthenticateHandler,
+} from '@/plugins/auth-guard.js'
 import { albumRoutes } from '@/routes/albums.js'
 import { authRoutes } from '@/routes/auth.js'
+import { fileRoutes } from '@/routes/files.js'
 import { healthRoutes } from '@/routes/health.js'
+import { imageProcessRoutes } from '@/routes/images-process.js'
 import { imageRoutes } from '@/routes/images.js'
 import { ensureUploadDir } from '@/services/storage.js'
 
@@ -115,11 +122,15 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<App> {
   if (options.jwtSecret) {
     await app.register(fastifyJwt, { secret: options.jwtSecret })
     await app.register(authGuardPlugin)
-    // Ensure authenticate is available on the app instance
-    // If the plugin didn't set it (due to proxy/scope issues), set it directly
+    // Ensure both authenticate decorators are available on the app instance
+    // — if the plugin didn't set them (due to proxy/scope issues), set them
+    // directly.
     const appRecord = app as unknown as Record<string, unknown>
     if (typeof appRecord.authenticate !== 'function') {
       appRecord.authenticate = createAuthenticateHandler(app)
+    }
+    if (typeof appRecord.authenticateAllowingQueryToken !== 'function') {
+      appRecord.authenticateAllowingQueryToken = createAuthenticateAllowingQueryTokenHandler(app)
     }
   }
 
@@ -142,6 +153,12 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<App> {
     if (!authenticate) {
       throw new Error('images routes require app.authenticate — jwtSecret registration above must run first')
     }
+    const authenticateAllowingQueryToken = app.authenticateAllowingQueryToken
+    if (!authenticateAllowingQueryToken) {
+      throw new Error(
+        'file routes require app.authenticateAllowingQueryToken — jwtSecret registration above must run first',
+      )
+    }
     await ensureUploadDir(options.uploadDir)
     // Explicit limits beyond `fileSize` close a DoS gap flagged in review:
     // without them `files`/`fields`/`parts` default to effectively
@@ -160,7 +177,24 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<App> {
         parts: 4,
       },
     })
-    await app.register(imageRoutes({ db: options.db, uploadDir: options.uploadDir, authenticate }))
+    await app.register(
+      imageRoutes({
+        db: options.db,
+        uploadDir: options.uploadDir,
+        authenticate,
+        authenticateAllowingQueryToken,
+      }),
+    )
+    await app.register(
+      imageProcessRoutes({ db: options.db, uploadDir: options.uploadDir, authenticate }),
+    )
+    await app.register(
+      fileRoutes({
+        db: options.db,
+        uploadDir: options.uploadDir,
+        authenticate: authenticateAllowingQueryToken,
+      }),
+    )
   }
 
   return app

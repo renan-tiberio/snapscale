@@ -12,8 +12,8 @@ import type { App } from '@/app.js'
 import { buildApp } from '@/app.js'
 import * as albumsRepo from '@/repositories/albums.js'
 import * as usersRepo from '@/repositories/users.js'
-import { buildMultipartPayload, makeColorPng, makeNoiseJpeg } from '~/test/fixtures.js'
 import { createTestDatabase, truncateAll, type TestDatabase } from '~/test/db.js'
+import { buildMultipartPayload, makeColorPng, makeNoiseJpeg } from '~/test/fixtures.js'
 
 const JWT_SECRET = 'test-images-process-secret'
 
@@ -132,10 +132,10 @@ describe('POST /images/process (docs/03 §4 — the heavy route)', () => {
   })
 
   it('the grayscale filter actually equalizes R/G/B on every sampled pixel', async () => {
-    const original = await makeColorPng(8, 8, { r: 200, g: 50, b: 10 })
+    const original = await makeColorPng(16, 16, { r: 200, g: 50, b: 10 })
     const imageId = await uploadImage(ownerToken, 'color.png', 'image/png', original)
 
-    const response = await process(ownerToken, { imageId, width: 8, height: 8, filter: 'grayscale', quality: 80 })
+    const response = await process(ownerToken, { imageId, width: 16, height: 16, filter: 'grayscale', quality: 80 })
 
     const body = (response.json() as Envelope<ProcessedImageBody>).data
     const resultBuffer = await readFile(join(uploadDir, body?.storagePath ?? ''))

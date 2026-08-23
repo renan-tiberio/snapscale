@@ -11,8 +11,8 @@ import type { App } from '@/app.js'
 import { buildApp } from '@/app.js'
 import * as albumsRepo from '@/repositories/albums.js'
 import * as usersRepo from '@/repositories/users.js'
-import { buildMultipartPayload, makeColorPng } from '~/test/fixtures.js'
 import { createTestDatabase, truncateAll, type TestDatabase } from '~/test/db.js'
+import { buildMultipartPayload, makeColorPng } from '~/test/fixtures.js'
 
 const JWT_SECRET = 'test-files-secret'
 
@@ -95,7 +95,7 @@ describe('GET /files/* and query-token auth (docs/03 §4/§7)', () => {
       method: 'POST',
       url: '/images/process',
       headers: { authorization: `Bearer ${token}` },
-      payload: { imageId, width: 4, height: 4, filter: 'none', quality: 80 },
+      payload: { imageId, width: 16, height: 16, filter: 'none', quality: 80 },
     })
     const body = (response.json() as Envelope<ProcessedImageBody>).data
     if (!body) {
