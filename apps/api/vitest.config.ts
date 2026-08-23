@@ -13,6 +13,12 @@ export default defineConfig({
     environment: 'node',
     globals: true,
     include: ['src/**/*.test.ts'],
+    // One throwaway Postgres container for the whole run (docs/05 decision 11);
+    // pulling/booting it and creating a database per file needs more than the
+    // 5s default, so hooks get a container-sized budget.
+    globalSetup: ['./test/global-setup.ts'],
+    testTimeout: 30_000,
+    hookTimeout: 120_000,
     coverage: {
       provider: 'v8',
       reporter: ['text', 'html'],
