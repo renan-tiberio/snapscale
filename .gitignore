@@ -6,3 +6,6 @@ coverage
 storybook-static
 test-results
 playwright-report
+
+# Local upload storage (runtime blobs, never versioned)
+apps/*/data/
