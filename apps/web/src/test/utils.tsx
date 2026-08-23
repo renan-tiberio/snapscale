@@ -1,15 +1,17 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { render } from '@testing-library/react'
-import { createMemoryRouter, RouterProvider } from 'react-router'
-
-import { AuthProvider } from '@/context/AuthContext'
-import { routes } from '@/router'
-import { AUTH_STORAGE_KEY } from '@/services/http'
+import { MemoryRouter, useRoutes } from 'react-router'
 
 import { TEST_TOKEN, testUser } from './msw/handlers'
 
 import type { SessionResponse } from '@snapscale/shared'
 import type { ReactNode } from 'react'
+
+import { AuthProvider } from '@/context/AuthContext'
+import { routes } from '@/router'
+import { AUTH_STORAGE_KEY } from '@/services/http'
+
+
 
 /** Writes a valid session to localStorage so a render starts authenticated. */
 export function seedSession(session: SessionResponse = { token: TEST_TOKEN, user: testUser }): void {
@@ -39,9 +41,23 @@ export function createHookWrapper() {
   }
 }
 
-/** Mounts the real route tree (App provides the query client + auth context). */
-export function renderApp(initialEntries: string[] = ['/']) {
-  const router = createMemoryRouter(routes, { initialEntries })
+function AppRoutes() {
+  return useRoutes(routes)
+}
 
-  return render(<RouterProvider router={router} />)
+/**
+ * Mounts the real route tree (App provides the query client + auth context).
+ *
+ * `MemoryRouter` + `useRoutes` rather than `createMemoryRouter`: the data
+ * router builds a `Request` for every navigation, and under jsdom that request
+ * is constructed with jsdom's `AbortSignal` while `Request` comes from Node —
+ * the brand check fails and the navigation never lands. The route objects are
+ * the very same ones `router.tsx` ships to the browser.
+ */
+export function renderApp(initialEntries: string[] = ['/']) {
+  return render(
+    <MemoryRouter initialEntries={initialEntries}>
+      <AppRoutes />
+    </MemoryRouter>,
+  )
 }

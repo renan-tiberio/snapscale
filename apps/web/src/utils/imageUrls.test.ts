@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest'
 
+import { imageFileUrl, processedImageUrl } from './imageUrls'
+
 import { API_BASE } from '@/test/msw/handlers'
 
-import { imageFileUrl, processedImageUrl } from './imageUrls'
 
 describe('imageUrls', () => {
   it('builds the original file URL on the configured API origin', () => {

@@ -9,10 +9,12 @@ export interface SizePreset {
   height: number
 }
 
+const WEB_PRESET: SizePreset = { id: 'web', label: 'Web — 1280×720', width: 1280, height: 720 }
+
 /** Ready-made output sizes offered by the process panel. */
 export const SIZE_PRESETS: SizePreset[] = [
   { id: 'thumbnail', label: 'Thumbnail — 320×240', width: 320, height: 240 },
-  { id: 'web', label: 'Web — 1280×720', width: 1280, height: 720 },
+  WEB_PRESET,
   { id: 'fullhd', label: 'Full HD — 1920×1080', width: 1920, height: 1080 },
 ]
 
@@ -21,8 +23,8 @@ export const SIZE_PRESETS: SizePreset[] = [
  * schema default, so the contract stays the single source of truth.
  */
 export const DEFAULT_PROCESS_OPTIONS: ImageProcessOptions = {
-  width: SIZE_PRESETS[1].width,
-  height: SIZE_PRESETS[1].height,
+  width: WEB_PRESET.width,
+  height: WEB_PRESET.height,
   filter: 'none',
   quality: imageProcessOptionsSchema.shape.quality.parse(undefined),
 }

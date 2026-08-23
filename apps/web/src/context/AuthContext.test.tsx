@@ -1,11 +1,12 @@
-import { render, screen } from '@testing-library/react'
+import { act, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it } from 'vitest'
+
+import { AuthProvider, useAuthContext } from './AuthContext'
 
 import { AUTH_STORAGE_KEY, LOGOUT_EVENT } from '@/services/http'
 import { TEST_TOKEN, testUser } from '@/test/msw/handlers'
 
-import { AuthProvider, useAuthContext } from './AuthContext'
 
 function SessionProbe() {
   const { user, isAuthenticated, login, logout } = useAuthContext()
@@ -70,7 +71,9 @@ describe('AuthContext', () => {
     renderProbe()
     await user.click(screen.getByRole('button', { name: 'sign in' }))
 
-    window.dispatchEvent(new Event(LOGOUT_EVENT))
+    act(() => {
+      window.dispatchEvent(new Event(LOGOUT_EVENT))
+    })
 
     expect(await screen.findByText('signed out')).toBeInTheDocument()
   })

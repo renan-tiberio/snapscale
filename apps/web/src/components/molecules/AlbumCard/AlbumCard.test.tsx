@@ -3,11 +3,12 @@ import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, RouterProvider } from 'react-router'
 import { describe, expect, it, vi } from 'vitest'
 
-import { fixtures } from '@/test/msw/handlers'
 
 import { AlbumCard } from './AlbumCard'
 
 import type { AlbumCardProps } from './AlbumCard.types'
+
+import { fixtures } from '@/test/msw/handlers'
 
 function renderAlbumCard(props: Partial<AlbumCardProps> = {}) {
   const router = createMemoryRouter([

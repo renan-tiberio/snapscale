@@ -3,11 +3,12 @@ import { renderHook, waitFor } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
 import { describe, expect, it } from 'vitest'
 
+import { useImages } from './useImages'
+
 import { API_BASE, fixtures } from '@/test/msw/handlers'
 import { server } from '@/test/msw/server'
 import { createHookWrapper, seedSession } from '@/test/utils'
 
-import { useImages } from './useImages'
 
 function renderUseImages(albumId: string = fixtures.album.id) {
   seedSession()

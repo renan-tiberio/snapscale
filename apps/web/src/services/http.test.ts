@@ -2,10 +2,11 @@ import { ERROR_CODES, fail, ok } from '@snapscale/shared'
 import { http as mswHttp, HttpResponse } from 'msw'
 import { describe, expect, it, vi } from 'vitest'
 
+import { ApiError, AUTH_STORAGE_KEY, http, LOGOUT_EVENT, readStoredSession } from './http'
+
 import { API_BASE, fixtures, TEST_TOKEN, testUser } from '@/test/msw/handlers'
 import { server } from '@/test/msw/server'
 
-import { ApiError, AUTH_STORAGE_KEY, http, LOGOUT_EVENT, readStoredSession } from './http'
 
 function seedStoredSession() {
   window.localStorage.setItem(

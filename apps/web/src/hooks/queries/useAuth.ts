@@ -1,5 +1,11 @@
+import { useMutation, useQueryClient } from '@tanstack/react-query'
+
 import type { ApiError } from '@/services/http'
-import type { User, VerifyOtpInput } from '@snapscale/shared'
+import type { SessionResponse, User, VerifyOtpInput } from '@snapscale/shared'
+
+import { useAuthContext } from '@/context/AuthContext'
+import { requestOtp, verifyOtp } from '@/services/auth'
+
 
 export interface UseAuthResult {
   user: User | null
@@ -16,23 +22,41 @@ export interface UseAuthResult {
   logout: () => void
 }
 
+/**
+ * The auth domain hook: OTP request, OTP verification and the session state
+ * they produce. Pages never call the auth service directly.
+ */
 export function useAuth(): UseAuthResult {
-  return {
-    user: {
-      id: '00000000-0000-4000-8000-000000000000',
-      email: 'stub@example.com',
-      createdAt: '2026-01-01T00:00:00.000Z',
+  const { user, token, isAuthenticated, login, logout } = useAuthContext()
+  const queryClient = useQueryClient()
+
+  const requestOtpMutation = useMutation<{ requested: boolean }, ApiError, string>({
+    mutationFn: (email) => requestOtp({ email }),
+  })
+
+  const verifyOtpMutation = useMutation<SessionResponse, ApiError, VerifyOtpInput>({
+    mutationFn: verifyOtp,
+    onSuccess: (session) => {
+      login(session)
+      queryClient.clear()
     },
-    token: 'stub-token',
-    isAuthenticated: true,
-    requestOtp: () => undefined,
-    isRequestingOtp: false,
-    isOtpRequested: false,
-    requestOtpError: null,
-    verifyOtp: () => undefined,
-    isVerifying: false,
-    verifyError: null,
-    resetOtpRequest: () => undefined,
-    logout: () => undefined,
+  })
+
+  return {
+    user,
+    token,
+    isAuthenticated,
+    requestOtp: requestOtpMutation.mutate,
+    isRequestingOtp: requestOtpMutation.isPending,
+    isOtpRequested: requestOtpMutation.isSuccess,
+    requestOtpError: requestOtpMutation.error,
+    verifyOtp: verifyOtpMutation.mutate,
+    isVerifying: verifyOtpMutation.isPending,
+    verifyError: verifyOtpMutation.error,
+    resetOtpRequest: requestOtpMutation.reset,
+    logout: () => {
+      logout()
+      queryClient.clear()
+    },
   }
 }

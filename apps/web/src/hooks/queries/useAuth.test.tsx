@@ -1,9 +1,10 @@
-import { renderHook, waitFor } from '@testing-library/react'
+import { act, renderHook, waitFor } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
+
+import { useAuth } from './useAuth'
 
 import { createHookWrapper, seedSession } from '@/test/utils'
 
-import { useAuth } from './useAuth'
 
 const EMAIL = 'renan@example.com'
 
@@ -53,7 +54,9 @@ describe('useAuth', () => {
     seedSession()
     const { result } = renderHook(() => useAuth(), { wrapper: createHookWrapper() })
 
-    result.current.logout()
+    act(() => {
+      result.current.logout()
+    })
 
     await waitFor(() => {
       expect(result.current.isAuthenticated).toBe(false)

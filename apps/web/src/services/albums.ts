@@ -1,17 +1,31 @@
+import { http } from './http'
+
 import type { Album, CreateAlbumInput, UpdateAlbumInput } from '@snapscale/shared'
 
+/** `GET /albums` */
 export async function listAlbums(): Promise<Album[]> {
-  return Promise.resolve([])
+  const { data } = await http.get<Album[]>('/albums')
+
+  return data
 }
 
-export async function createAlbum(_input: CreateAlbumInput): Promise<Album> {
-  return Promise.reject(new Error('not implemented'))
+/** `POST /albums` */
+export async function createAlbum(input: CreateAlbumInput): Promise<Album> {
+  const { data } = await http.post<Album>('/albums', input)
+
+  return data
 }
 
-export async function updateAlbum(_id: string, _input: UpdateAlbumInput): Promise<Album> {
-  return Promise.reject(new Error('not implemented'))
+/** `PATCH /albums/:id` */
+export async function updateAlbum(id: string, input: UpdateAlbumInput): Promise<Album> {
+  const { data } = await http.patch<Album>(`/albums/${id}`, input)
+
+  return data
 }
 
-export async function deleteAlbum(_id: string): Promise<void> {
-  return Promise.reject(new Error('not implemented'))
+/** `DELETE /albums/:id` — answers `{}`, so the deleted id is what callers get back. */
+export async function deleteAlbum(id: string): Promise<string> {
+  await http.delete(`/albums/${id}`)
+
+  return id
 }

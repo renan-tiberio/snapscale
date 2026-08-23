@@ -2,11 +2,12 @@ import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 
-import { fixtures } from '@/test/msw/handlers'
 
 import { ImageCard } from './ImageCard'
 
 import type { ImageCardProps } from './ImageCard.types'
+
+import { fixtures } from '@/test/msw/handlers'
 
 const SRC = `http://localhost:4000/images/${fixtures.image.id}/file`
 
