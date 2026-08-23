@@ -29,6 +29,16 @@ export const sessionResponseSchema = z.object({
 export type SessionResponse = z.infer<typeof sessionResponseSchema>
 
 /**
+ * `GET /auth/me` success data: `{ user }` (docs/03 §4). Wrapped in an object
+ * rather than returning the user bare so the payload can grow (session
+ * metadata, entitlements) without breaking the client's `data.user` read.
+ */
+export const meResponseSchema = z.object({
+  user: userSchema,
+})
+export type MeResponse = z.infer<typeof meResponseSchema>
+
+/**
  * `GET /auth/file-token` success data: `{ token }` — a 60s, `scope: 'file'`
  * token for `<img src>` / `?token=` use, never the 1h session token (see
  * `plugins/auth-guard.ts` and `docs/03-technical-design.md` §4).

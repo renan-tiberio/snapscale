@@ -180,6 +180,20 @@ export async function listImagesForAlbum(
   return rows.map(toApiImage)
 }
 
+/**
+ * `GET /images/:id` — the entity, not the bytes (docs/03 §4).
+ * `imagesRepo.findById` isn't owner-scoped, so ownership is checked here and
+ * a foreign id throws the same NOT_FOUND as an unknown one.
+ */
+export async function getImage(deps: ImageServiceDeps, imageId: string, ownerId: string): Promise<ApiImage> {
+  const image = await imagesRepo.findById(deps.db, imageId)
+  if (!image || image.ownerId !== ownerId) {
+    throw new ImageServiceError(ERROR_CODES.NOT_FOUND, 'Image not found')
+  }
+
+  return toApiImage(image)
+}
+
 export interface ImageFile {
   readonly absolutePath: string
   readonly mimeType: string

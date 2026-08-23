@@ -37,6 +37,7 @@ import { fileRoutes } from '@/routes/files.js'
 import { healthRoutes } from '@/routes/health.js'
 import { imageProcessRoutes } from '@/routes/images-process.js'
 import { imageRoutes } from '@/routes/images.js'
+import { meRoutes } from '@/routes/me.js'
 import { ensureUploadDir } from '@/services/storage.js'
 
 /** Fastify instance typed with the Zod type provider — the shape every route module works with. */
@@ -279,6 +280,7 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<App> {
     }
 
     if (options.db) {
+      await app.register(meRoutes({ db: options.db, authenticate }))
       await app.register(albumRoutes({ db: options.db, authenticate }))
     }
 

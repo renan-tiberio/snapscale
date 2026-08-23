@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { requestOtpSchema, sessionResponseSchema, verifyOtpSchema } from './auth.js'
+import { meResponseSchema, requestOtpSchema, sessionResponseSchema, verifyOtpSchema } from './auth.js'
 
 describe('requestOtpSchema', () => {
   it('accepts a well-formed email', () => {
@@ -97,5 +97,35 @@ describe('sessionResponseSchema', () => {
     expect(result.success).toBe(false)
     if (result.success) throw new Error('expected parse to fail')
     expect(result.error.issues.some((issue) => issue.path.join('.') === 'user.id')).toBe(true)
+  })
+})
+
+describe('meResponseSchema', () => {
+  const validUser = {
+    id: '3fa85f64-5717-4562-b3fc-2c963f66afa6',
+    email: 'user@example.com',
+    createdAt: '2026-01-01T00:00:00.000Z',
+  }
+
+  it('accepts a wrapped user', () => {
+    const result = meResponseSchema.safeParse({ user: validUser })
+
+    expect(result.success).toBe(true)
+  })
+
+  it('rejects a bare user — `data` is `{ user }`, not the user itself (docs/03 §4)', () => {
+    const result = meResponseSchema.safeParse(validUser)
+
+    expect(result.success).toBe(false)
+    if (result.success) throw new Error('expected parse to fail')
+    expect(result.error.issues.some((issue) => issue.path[0] === 'user')).toBe(true)
+  })
+
+  it('rejects a user whose createdAt is not an ISO datetime', () => {
+    const result = meResponseSchema.safeParse({ user: { ...validUser, createdAt: 'yesterday' } })
+
+    expect(result.success).toBe(false)
+    if (result.success) throw new Error('expected parse to fail')
+    expect(result.error.issues.some((issue) => issue.path.join('.') === 'user.createdAt')).toBe(true)
   })
 })

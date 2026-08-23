@@ -7,7 +7,7 @@ import type { App } from '@/app.js'
 import type { Database } from '@/db/index.js'
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod'
 
-import { ImageServiceError, getImageFile, listImagesForAlbum, uploadImage } from '@/services/images.js'
+import { ImageServiceError, getImage, getImageFile, listImagesForAlbum, uploadImage } from '@/services/images.js'
 
 export interface ImageRoutesDeps {
   readonly db: Database
@@ -39,6 +39,19 @@ const imageListResponseSchema = z.object({
 const listImagesQuerySchema = z.object({ albumId: z.string().uuid() })
 const imageIdParamsSchema = z.object({ id: z.string().uuid() })
 
+/**
+ * Documentation only — `/docs` showed a `multipart/form-data` request body
+ * with no fields at all before this existed. `@fastify/multipart` streams the
+ * parts through `request.parts()` and leaves `request.body` null, so the
+ * route below neutralizes its validator: validating this schema against
+ * `null` would 400 every real upload. The parts are still validated, part by
+ * part, inside the handler.
+ */
+const uploadImageBodySchema = z.object({
+  file: z.string().describe('The image bytes (jpeg/png/webp, max 10MB).'),
+  albumId: z.string().uuid().describe('Id of one of the caller\'s albums.'),
+})
+
 const FILE_TOO_LARGE_CODE = 'FST_REQ_FILE_TOO_LARGE'
 
 function isFileTooLargeError(error: unknown): boolean {
@@ -55,10 +68,16 @@ export function imageRoutes(deps: ImageRoutesDeps): FastifyPluginAsyncZod {
       '/images',
       {
         preHandler: deps.authenticate,
+        // See `uploadImageBodySchema`: the body schema is there to document
+        // the two multipart fields, and `request.body` is null for a
+        // streamed multipart request, so the route opts out of body
+        // validation instead of rejecting every upload with a 400.
+        validatorCompiler: () => (data: unknown) => ({ value: data }),
         schema: {
           description: 'Uploads an image (multipart: `file` + `albumId`) into one of the caller\'s albums.',
           tags: ['images'],
           consumes: ['multipart/form-data'],
+          body: uploadImageBodySchema,
           response: {
             200: imageResponseSchema,
             401: errorEnvelopeSchema,
@@ -162,6 +181,41 @@ export function imageRoutes(deps: ImageRoutesDeps): FastifyPluginAsyncZod {
         } catch (error) {
           // `listImagesForAlbum` only ever throws NOT_FOUND — 404 is the
           // only mapping this route needs.
+          if (error instanceof ImageServiceError) {
+            reply.code(404).send(fail(error.code, error.message))
+            return
+          }
+          throw error
+        }
+      },
+    )
+
+    fastify.get(
+      '/images/:id',
+      {
+        preHandler: deps.authenticate,
+        schema: {
+          description: "Gets one of the caller's images — the entity, not the file bytes.",
+          tags: ['images'],
+          params: imageIdParamsSchema,
+          response: {
+            200: imageResponseSchema,
+            401: errorEnvelopeSchema,
+            404: errorEnvelopeSchema,
+          },
+        },
+      },
+      async (request, reply) => {
+        try {
+          const image = await getImage(
+            { db: deps.db, uploadDir: deps.uploadDir },
+            request.params.id,
+            request.user.id,
+          )
+          return ok(image)
+        } catch (error) {
+          // `getImage` only ever throws NOT_FOUND — 404 is the only mapping
+          // this route needs, and a foreign id lands on it too.
           if (error instanceof ImageServiceError) {
             reply.code(404).send(fail(error.code, error.message))
             return
