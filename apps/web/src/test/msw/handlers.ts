@@ -12,6 +12,8 @@ import type { Album, Image, ProcessedImage, User } from '@snapscale/shared'
 export const API_BASE = 'http://localhost:4000'
 
 export const TEST_TOKEN = 'test-session-token'
+/** The `scope: 'file'` token `GET /auth/file-token` hands back — see `hooks/queries/useFileToken.ts`. */
+export const TEST_FILE_TOKEN = 'test-file-token'
 export const VALID_OTP = '123456'
 
 export const testUser: User = {
@@ -96,6 +98,8 @@ export const handlers = [
 
     return HttpResponse.json(ok({ token: TEST_TOKEN, user: { ...testUser, email: body.email } }))
   }),
+
+  http.get(`${API_BASE}/auth/file-token`, () => HttpResponse.json(ok({ token: TEST_FILE_TOKEN }))),
 
   http.get(`${API_BASE}/albums`, () =>
     HttpResponse.json(
