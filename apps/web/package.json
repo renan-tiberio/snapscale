@@ -1,0 +1,16 @@
+{
+  "name": "@snapscale/web",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "devDependencies": {
+    "@snapscale/eslint-config": "workspace:*",
+    "@snapscale/tsconfig": "workspace:*",
+    "eslint": "9.39.5",
+    "typescript": "5.9.3"
+  }
+}
