@@ -1,7 +1,8 @@
 import fastifyJwt from '@fastify/jwt'
+import fastifyMultipart from '@fastify/multipart'
 import fastifySwagger from '@fastify/swagger'
 import fastifySwaggerUi from '@fastify/swagger-ui'
-import { ERROR_CODES, fail } from '@snapscale/shared'
+import { ERROR_CODES, MAX_UPLOAD_BYTES, fail } from '@snapscale/shared'
 import Fastify, {
   type FastifyBaseLogger,
   type FastifyInstance,
@@ -21,8 +22,11 @@ import type { Database } from '@/db/index.js'
 import type { Mailer } from '@/services/mailer.js'
 
 import { AuthenticationError, authGuardPlugin, createAuthenticateHandler } from '@/plugins/auth-guard.js'
+import { albumRoutes } from '@/routes/albums.js'
 import { authRoutes } from '@/routes/auth.js'
 import { healthRoutes } from '@/routes/health.js'
+import { imageRoutes } from '@/routes/images.js'
+import { ensureUploadDir } from '@/services/storage.js'
 
 /** Fastify instance typed with the Zod type provider — the shape every route module works with. */
 export type App = FastifyInstance<
@@ -45,6 +49,12 @@ export interface BuildAppOptions {
   mailer?: Mailer
   jwtSecret?: string
   otpTtlSeconds?: number
+  /**
+   * Root of the upload volume (docs/03 §7). Albums never touch it; images
+   * routes only mount once this — plus `db` and `jwtSecret` — are supplied,
+   * same "pay only for what you configure" rule as the auth routes above.
+   */
+  uploadDir?: string
 }
 
 /**
@@ -117,6 +127,40 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<App> {
     await app.register(
       authRoutes({ db: options.db, mailer: options.mailer, otpTtlSeconds: options.otpTtlSeconds }),
     )
+  }
+
+  if (options.db && options.jwtSecret) {
+    const authenticate = app.authenticate
+    if (!authenticate) {
+      throw new Error('albums routes require app.authenticate — jwtSecret registration above must run first')
+    }
+    await app.register(albumRoutes({ db: options.db, authenticate }))
+  }
+
+  if (options.db && options.jwtSecret && options.uploadDir) {
+    const authenticate = app.authenticate
+    if (!authenticate) {
+      throw new Error('images routes require app.authenticate — jwtSecret registration above must run first')
+    }
+    await ensureUploadDir(options.uploadDir)
+    // Explicit limits beyond `fileSize` close a DoS gap flagged in review:
+    // without them `files`/`fields`/`parts` default to effectively
+    // unbounded, so one authenticated request could push far more than
+    // `MAX_UPLOAD_BYTES` of multipart data at the parser. The upload
+    // contract is exactly one `file` part plus one `albumId` field
+    // (docs/03 §4/§7) — these limits give that a little slack, not room
+    // for abuse.
+    await app.register(fastifyMultipart, {
+      limits: {
+        fileSize: MAX_UPLOAD_BYTES,
+        files: 1,
+        fields: 2,
+        fieldSize: 1024,
+        fieldNameSize: 100,
+        parts: 4,
+      },
+    })
+    await app.register(imageRoutes({ db: options.db, uploadDir: options.uploadDir, authenticate }))
   }
 
   return app

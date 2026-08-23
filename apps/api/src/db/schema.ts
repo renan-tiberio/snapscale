@@ -64,7 +64,14 @@ export const images = pgTable(
     mimeType: text('mime_type').notNull(),
     sizeBytes: integer('size_bytes').notNull(),
     storagePath: text('storage_path').notNull(),
+    // Nullable: only populated by the upload route (sharp metadata read,
+    // docs/03 §7); pre-existing rows/tests that insert without dimensions
+    // stay valid. `updatedAt` mirrors `albums` so the api's `Image` schema
+    // (packages/shared) always has a value to serialize.
+    width: integer('width'),
+    height: integer('height'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
   // The gallery lists images album by album.
   (table) => [index('images_album_id_idx').on(table.albumId)],

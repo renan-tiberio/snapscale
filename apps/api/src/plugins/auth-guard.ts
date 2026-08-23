@@ -34,6 +34,18 @@ declare module 'fastify' {
 }
 
 /**
+ * `@fastify/jwt` types `request.user` as `FastifyJWT['user']`, which defaults
+ * to `{ [key: string]: any }` — this pins it to the shape the preHandler
+ * below actually sets, so every guarded route reads `request.user.id` /
+ * `.email` without an `any` escape.
+ */
+declare module '@fastify/jwt' {
+  interface FastifyJWT {
+    user: AuthenticatedUser
+  }
+}
+
+/**
  * Creates the authentication preHandler function that verifies JWT Bearer tokens.
  * This function is used as a preHandler on routes that require authentication.
  */

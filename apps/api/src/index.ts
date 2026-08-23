@@ -15,6 +15,7 @@ async function main(): Promise<void> {
     mailer,
     jwtSecret: config.JWT_SECRET,
     otpTtlSeconds: config.OTP_TTL_SECONDS,
+    uploadDir: config.UPLOAD_DIR,
   })
 
   app.addHook('onClose', async () => {

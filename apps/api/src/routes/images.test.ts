@@ -212,6 +212,25 @@ describe('image routes (/images)', () => {
     expect(count.rows[0]?.count).toBe('0')
   })
 
+  it('rejects an SVG uploaded with a spoofed allowed mime header — format must match jpeg/png/webp, not just "parses as some image"', async () => {
+    const svg = Buffer.from(
+      '<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><rect width="10" height="10"/></svg>',
+      'utf8',
+    )
+
+    const response = await upload(
+      ownerToken,
+      { albumId },
+      { filename: 'sneaky.png', contentType: 'image/png', data: svg },
+    )
+
+    expect(response.statusCode).toBe(422)
+    expect(response.json()).toMatchObject({ success: false, error: { code: ERROR_CODES.VALIDATION_ERROR } })
+
+    const count = await database.pool.query('select count(*)::text from images')
+    expect(count.rows[0]?.count).toBe('0')
+  })
+
   it('lists only the images of my own album', async () => {
     await upload(ownerToken, { albumId }, { filename: 'a.png', contentType: 'image/png', data: pngBuffer })
     await upload(ownerToken, { albumId }, { filename: 'b.png', contentType: 'image/png', data: pngBuffer })
