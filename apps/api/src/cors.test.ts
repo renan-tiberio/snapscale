@@ -60,9 +60,38 @@ describe('CORS between the web app origin and the api', () => {
       headers: { origin: FOREIGN_ORIGIN },
     })
 
-    // The allowlist is the point: echoing any Origin back would make the
-    // header decorative rather than a control.
-    expect(response.headers['access-control-allow-origin']).not.toBe(FOREIGN_ORIGIN)
+    // The allowlist is the point: echoing any Origin back — or answering
+    // with a wildcard `origin: true`/`'*'` config — would make the header
+    // decorative rather than a control. Only "absent" proves the allowlist
+    // is enforced; "present but not exactly FOREIGN_ORIGIN" is also
+    // satisfied by a wildcard config, which is the actual danger here.
+    expect(response.headers['access-control-allow-origin']).toBeUndefined()
+
+    await app.close()
+  })
+
+  it('never grants a preflight from an unlisted origin an allow-origin header', async () => {
+    const app = await buildApp({ logger: false, webOrigin: WEB_ORIGIN })
+    await app.ready()
+
+    const response = await app.inject({
+      method: 'OPTIONS',
+      url: '/auth/otp/request',
+      headers: {
+        origin: FOREIGN_ORIGIN,
+        'access-control-request-method': 'POST',
+        'access-control-request-headers': 'content-type',
+      },
+    })
+
+    // A browser only trusts a preflight response once
+    // access-control-allow-origin is present *and* matches — so this header
+    // (not allow-methods/allow-headers, which the middleware answers with
+    // regardless of origin) is the one control point that must be absent
+    // for a foreign origin, on the preflight surface as well as the simple
+    // request above. An `origin: true`/`'*'` config would echo or emit a
+    // value here instead of leaving it undefined.
+    expect(response.headers['access-control-allow-origin']).toBeUndefined()
 
     await app.close()
   })

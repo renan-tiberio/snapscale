@@ -189,12 +189,27 @@ describe('otp service', () => {
       })
     })
 
-    it('invalidates the code after 5 wrong attempts — the right code no longer works afterward', async () => {
+    it('keeps the code usable through exactly 4 wrong attempts — the right code still verifies', async () => {
       const email = 'ada@example.com'
       const { code } = await issueCode(email)
       const wrongCode = code === '000000' ? '111111' : '000000'
 
-      for (let attempt = 0; attempt < 6; attempt += 1) {
+      for (let attempt = 0; attempt < 4; attempt += 1) {
+        await expect(verifyOtp({ db: database.db }, email, wrongCode)).rejects.toBeInstanceOf(
+          OtpServiceError,
+        )
+      }
+
+      const result = await verifyOtp({ db: database.db }, email, code)
+      expect(result.user.email).toBe(email)
+    })
+
+    it('invalidates the code after exactly 5 wrong attempts — the right code no longer works afterward', async () => {
+      const email = 'ada@example.com'
+      const { code } = await issueCode(email)
+      const wrongCode = code === '000000' ? '111111' : '000000'
+
+      for (let attempt = 0; attempt < 5; attempt += 1) {
         await expect(verifyOtp({ db: database.db }, email, wrongCode)).rejects.toBeInstanceOf(
           OtpServiceError,
         )

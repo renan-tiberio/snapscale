@@ -136,6 +136,23 @@ describe('auth routes (/auth/otp/*)', () => {
     expect(payload.email).toBe(email)
   })
 
+  it('issues a session token that expires exactly 1 hour after it was issued (docs/03 §5)', async () => {
+    const email = uniqueEmail()
+    const code = await requestOtpCode(email)
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/auth/otp/verify',
+      payload: { email, code },
+    })
+
+    expect(response.statusCode).toBe(200)
+    const body = response.json() as Envelope<{ token: string }>
+
+    const payload = app.jwt.verify(body.data?.token ?? '') as { exp: number; iat: number }
+    expect(payload.exp - payload.iat).toBe(3600)
+  })
+
   it('rejects a second use of the same code with a 401 UNAUTHORIZED envelope', async () => {
     const email = uniqueEmail()
     const code = await requestOtpCode(email)
@@ -170,12 +187,41 @@ describe('auth routes (/auth/otp/*)', () => {
     })
   })
 
-  it('invalidates the code after 6 wrong attempts, so even the right code then 401s', async () => {
+  it('keeps the code usable through exactly 4 wrong attempts, so the right code still 200s', async () => {
     const email = uniqueEmail()
     const code = await requestOtpCode(email)
     const wrongCode = code === '000000' ? '111111' : '000000'
 
-    for (let attempt = 0; attempt < 6; attempt += 1) {
+    for (let attempt = 0; attempt < 4; attempt += 1) {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/auth/otp/verify',
+        payload: { email, code: wrongCode },
+      })
+      expect(response.statusCode).toBe(401)
+      expect(response.json()).toMatchObject({
+        success: false,
+        error: { code: ERROR_CODES.UNAUTHORIZED },
+      })
+    }
+
+    const finalAttempt = await app.inject({
+      method: 'POST',
+      url: '/auth/otp/verify',
+      payload: { email, code },
+    })
+
+    expect(finalAttempt.statusCode).toBe(200)
+    const body = finalAttempt.json() as Envelope<{ user: { email: string } }>
+    expect(body.data?.user.email).toBe(email)
+  })
+
+  it('invalidates the code after exactly 5 wrong attempts, so even the right code then 401s', async () => {
+    const email = uniqueEmail()
+    const code = await requestOtpCode(email)
+    const wrongCode = code === '000000' ? '111111' : '000000'
+
+    for (let attempt = 0; attempt < 5; attempt += 1) {
       const response = await app.inject({
         method: 'POST',
         url: '/auth/otp/verify',

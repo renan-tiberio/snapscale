@@ -13,7 +13,7 @@ import { buildApp } from '@/app.js'
 import * as albumsRepo from '@/repositories/albums.js'
 import * as usersRepo from '@/repositories/users.js'
 import { createTestDatabase, truncateAll, type TestDatabase } from '~/test/db.js'
-import { buildMultipartPayload, makeColorPng, makeNoiseJpeg } from '~/test/fixtures.js'
+import { buildMultipartPayload, makeColorPng, makeNoiseJpeg, makeTwoToneColorPng } from '~/test/fixtures.js'
 
 const JWT_SECRET = 'test-images-process-secret'
 
@@ -61,8 +61,9 @@ describe('POST /images/process (docs/03 §4 — the heavy route)', () => {
     await truncateAll(database)
     ownerId = (await usersRepo.upsertByEmail(database.db, uniqueEmail('owner'))).id
     intruderId = (await usersRepo.upsertByEmail(database.db, uniqueEmail('intruder'))).id
-    ownerToken = await app.jwt.sign({ sub: ownerId, email: 'owner@example.com' })
-    intruderToken = await app.jwt.sign({ sub: intruderId, email: 'intruder@example.com' })
+    // `scope: 'session'` — the header guard now requires it explicitly (plugins/auth-guard.ts).
+    ownerToken = await app.jwt.sign({ sub: ownerId, email: 'owner@example.com', scope: 'session' })
+    intruderToken = await app.jwt.sign({ sub: intruderId, email: 'intruder@example.com', scope: 'session' })
     albumId = (await albumsRepo.create(database.db, { ownerId, name: 'Trip' })).id
   })
 
@@ -132,7 +133,13 @@ describe('POST /images/process (docs/03 §4 — the heavy route)', () => {
   })
 
   it('the grayscale filter actually equalizes R/G/B on every sampled pixel', async () => {
-    const original = await makeColorPng(16, 16, { r: 200, g: 50, b: 10 })
+    // Two-tone, not uniform: a uniform fixture's "correct grayscale" output
+    // is itself uniform, which is indistinguishable from a bug that just
+    // fills every pixel with the same constant value, and a no-op filter
+    // that merely forwards the fixture's own non-gray color would slip
+    // through equally unnoticed if the two halves collapsed into one
+    // undifferentiated read. Two differently-lit regions close both gaps.
+    const original = await makeTwoToneColorPng(16, 16)
     const imageId = await uploadImage(ownerToken, 'color.png', 'image/png', original)
 
     const response = await process(ownerToken, { imageId, width: 16, height: 16, filter: 'grayscale', quality: 80 })
@@ -140,8 +147,15 @@ describe('POST /images/process (docs/03 §4 — the heavy route)', () => {
     const body = (response.json() as Envelope<ProcessedImageBody>).data
     const resultBuffer = await readFile(join(uploadDir, body?.storagePath ?? ''))
 
-    const { data, info } = await sharp(resultBuffer).raw().toBuffer({ resolveWithObject: true })
-    expect(info.channels).toBeGreaterThanOrEqual(1)
+    // Force sRGB before reading raw bytes so `info.channels` is a stable,
+    // known quantity (3) regardless of whether the PNG encoder chose an
+    // indexed/palette or true-grayscale colour type — `toBeGreaterThanOrEqual(1)`
+    // was a tautology that passed for any channel count at all.
+    const { data, info } = await sharp(resultBuffer)
+      .toColourspace('srgb')
+      .raw()
+      .toBuffer({ resolveWithObject: true })
+    expect(info.channels).toBe(3)
 
     // Sample every pixel — small fixture, cheap to check exhaustively.
     for (let pixel = 0; pixel < info.width * info.height; pixel += 1) {
@@ -152,6 +166,15 @@ describe('POST /images/process (docs/03 §4 — the heavy route)', () => {
       expect(r).toBe(g)
       expect(g).toBe(b)
     }
+
+    // The two source halves had different luminance — a correct per-pixel
+    // conversion must still show that difference in the grayscale output.
+    // A constant-fill bug (every pixel forced to one gray value) would
+    // equalize R/G/B too, but would fail this one.
+    const topPixel = data[0]
+    const bottomOffset = (info.height - 1) * info.width * info.channels
+    const bottomPixel = data[bottomOffset]
+    expect(topPixel).not.toBe(bottomPixel)
   })
 
   it('quality affects byte size for a jpeg fixture: q20 produces a smaller file than q95', async () => {
