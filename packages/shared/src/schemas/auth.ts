@@ -27,3 +27,13 @@ export const sessionResponseSchema = z.object({
   user: userSchema,
 })
 export type SessionResponse = z.infer<typeof sessionResponseSchema>
+
+/**
+ * `GET /auth/file-token` success data: `{ token }` — a 60s, `scope: 'file'`
+ * token for `<img src>` / `?token=` use, never the 1h session token (see
+ * `plugins/auth-guard.ts` and `docs/03-technical-design.md` §4).
+ */
+export const fileTokenResponseSchema = z.object({
+  token: z.string().min(1),
+})
+export type FileTokenResponse = z.infer<typeof fileTokenResponseSchema>

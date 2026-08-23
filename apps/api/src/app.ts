@@ -7,6 +7,8 @@ import { ERROR_CODES, MAX_UPLOAD_BYTES, fail } from '@snapscale/shared'
 import Fastify, {
   type FastifyBaseLogger,
   type FastifyInstance,
+  type FastifyRequest,
+  type FastifyServerOptions,
   type RawReplyDefaultExpression,
   type RawRequestDefaultExpression,
   type RawServerDefault,
@@ -30,6 +32,7 @@ import {
 } from '@/plugins/auth-guard.js'
 import { albumRoutes } from '@/routes/albums.js'
 import { authRoutes } from '@/routes/auth.js'
+import { fileTokenRoutes } from '@/routes/file-token.js'
 import { fileRoutes } from '@/routes/files.js'
 import { healthRoutes } from '@/routes/health.js'
 import { imageProcessRoutes } from '@/routes/images-process.js'
@@ -45,9 +48,27 @@ export type App = FastifyInstance<
   ZodTypeProvider
 >
 
+/**
+ * The subset of pino/Fastify logger options a test actually needs to inspect
+ * emitted log lines — a custom `stream` to capture them, optionally a
+ * `level`. Kept narrow instead of the full `FastifyServerOptions['logger']`
+ * union so `buildLoggerOptions` can merge it with the always-on redacting
+ * `req` serializer without fighting a deeply nested pino type.
+ */
+export interface LoggerTestOptions {
+  readonly stream?: { write(msg: string): void }
+  readonly level?: string
+}
+
 export interface BuildAppOptions {
-  /** Passed straight through to Fastify's `logger` option; `false` silences pino in tests. */
-  logger?: boolean
+  /**
+   * Passed through to Fastify's `logger` option; `false` silences pino in
+   * tests. A `LoggerTestOptions` object (e.g. `{ stream }`) is also accepted
+   * so tests can capture log output — the `token` query param is always
+   * redacted from `req.url` regardless of which form is passed (see
+   * `buildLoggerOptions` below; fixes the credential-in-logs finding).
+   */
+  logger?: boolean | LoggerTestOptions
   /**
    * Auth routes (`/auth/otp/*`, §4/§5) only mount when every dependency
    * below is supplied — tests that only need `/health` (the bulk of
@@ -74,6 +95,50 @@ export interface BuildAppOptions {
 /** Vite's dev server origin; the only browser client in phase 1. */
 const DEFAULT_WEB_ORIGIN = 'http://localhost:5173'
 
+const REDACTED_TOKEN_MARKER = '[REDACTED]'
+
+/**
+ * Strips the value of a `?token=`/`&token=` query param from a URL string,
+ * case-insensitively — the fix for the finding that a file-serving request's
+ * full session/file JWT ends up verbatim in pino's default `req.url` log
+ * field (and in browser history / Referer, which this redaction cannot
+ * reach, but which is why the token is now short-lived and scope-limited —
+ * see `plugins/auth-guard.ts`).
+ */
+function redactTokenFromUrl(url: string): string {
+  return url.replace(/([?&]token=)[^&]*/gi, `$1${REDACTED_TOKEN_MARKER}`)
+}
+
+/**
+ * Builds the `logger` option passed to `Fastify()`. Always installs a `req`
+ * serializer that redacts `?token=` before it reaches the log line,
+ * regardless of whether the caller passed `true`/`false` (production
+ * default, test default) or a logger options object (tests that need to
+ * inspect the emitted lines via a custom `stream`).
+ */
+function buildLoggerOptions(logger: BuildAppOptions['logger']): NonNullable<FastifyServerOptions['logger']> {
+  if (logger === false) {
+    return false
+  }
+
+  const base: LoggerTestOptions = typeof logger === 'object' && logger !== null ? logger : {}
+
+  return {
+    ...base,
+    serializers: {
+      req(request: FastifyRequest) {
+        return {
+          method: request.method,
+          url: redactTokenFromUrl(request.url),
+          hostname: request.hostname,
+          remoteAddress: request.ip,
+          ...(request.socket.remotePort === undefined ? {} : { remotePort: request.socket.remotePort }),
+        }
+      },
+    },
+  }
+}
+
 /**
  * Builds (but does not start listening on) the Fastify app. Kept separate
  * from `index.ts` so tests exercise the full app via `app.inject()` without
@@ -81,7 +146,7 @@ const DEFAULT_WEB_ORIGIN = 'http://localhost:5173'
  */
 export async function buildApp(options: BuildAppOptions = {}): Promise<App> {
   const app = Fastify({
-    logger: options.logger ?? true,
+    logger: buildLoggerOptions(options.logger ?? true),
   }).withTypeProvider<ZodTypeProvider>()
 
   app.setValidatorCompiler(validatorCompiler)
@@ -140,7 +205,15 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<App> {
   await app.register(healthRoutes)
 
   if (options.jwtSecret) {
-    await app.register(fastifyJwt, { secret: options.jwtSecret })
+    // Algorithms pinned explicitly on both sides (review finding L5): without
+    // this, `@fastify/jwt`/`jsonwebtoken` still default to HS256 today, but a
+    // future dependency bump silently widening the accepted `alg` set would
+    // be an algorithm-confusion vector, not just a config nicety.
+    await app.register(fastifyJwt, {
+      secret: options.jwtSecret,
+      sign: { algorithm: 'HS256' },
+      verify: { algorithms: ['HS256'] },
+    })
     await app.register(authGuardPlugin)
     // Ensure both authenticate decorators are available on the app instance
     // — if the plugin didn't set them (due to proxy/scope issues), set them
@@ -152,6 +225,12 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<App> {
     if (typeof appRecord.authenticateAllowingQueryToken !== 'function') {
       appRecord.authenticateAllowingQueryToken = createAuthenticateAllowingQueryTokenHandler(app)
     }
+
+    const authenticateForFileToken = app.authenticate
+    if (!authenticateForFileToken) {
+      throw new Error('file-token route requires app.authenticate — jwtSecret registration above must run first')
+    }
+    await app.register(fileTokenRoutes({ authenticate: authenticateForFileToken }))
   }
 
   if (options.db && options.mailer && options.jwtSecret && options.otpTtlSeconds) {

@@ -92,7 +92,13 @@ export function authRoutes(deps: AuthRoutesDeps): FastifyPluginAsyncZod {
       async (request, reply) => {
         try {
           const { user } = await verifyOtp({ db: deps.db }, request.body.email, request.body.code)
-          const token = await fastify.jwt.sign({ sub: user.id, email: user.email }, { expiresIn: JWT_EXPIRY })
+          // `scope: 'session'` is explicit (not just "no scope") so the
+          // header guard's scope check in `plugins/auth-guard.ts` has
+          // something concrete to require — see docs/03 §4.
+          const token = await fastify.jwt.sign(
+            { sub: user.id, email: user.email, scope: 'session' as const },
+            { expiresIn: JWT_EXPIRY },
+          )
 
           return ok({
             token,
