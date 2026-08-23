@@ -1,6 +1,14 @@
 import { createHash } from 'node:crypto'
 
-import { ERROR_CODES, type AllowedImageMimeType, type ImageFilter, type ImageProcessOptions, type ProcessedImage as ApiProcessedImage } from '@snapscale/shared'
+import {
+  ALLOWED_IMAGE_MIME_TYPES,
+  ERROR_CODES,
+  IMAGE_FILTERS,
+  type AllowedImageMimeType,
+  type ImageFilter,
+  type ImageProcessOptions,
+  type ProcessedImage as ApiProcessedImage,
+} from '@snapscale/shared'
 import sharp, { type Sharp } from 'sharp'
 
 import type { Database } from '@/db/index.js'
@@ -20,8 +28,28 @@ const MIME_EXTENSIONS: Record<AllowedImageMimeType, string> = {
 /** libvips blur `sigma` for the `blur` filter — visibly soft, well inside sharp's [0.3, 1000] range. */
 const BLUR_SIGMA = 5
 
-/** Postgres unique-violation SQLSTATE — the race the idempotent insert below has to tolerate. */
-const UNIQUE_VIOLATION_CODE = '23505'
+/**
+ * Thrown when a persisted row violates an invariant that's supposed to be
+ * enforced elsewhere (upload validation for `images.mime_type`, request
+ * validation for `processed_images.filter`) — i.e. the row itself is
+ * corrupt, not something the caller did wrong. Deliberately NOT an
+ * `ImageServiceError`: the route only maps that one to 404 (unknown/foreign
+ * image), and this is neither — it has to fall through to a real 500.
+ */
+export class ImageDataInvariantError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'ImageDataInvariantError'
+  }
+}
+
+function isAllowedImageMimeType(value: string | undefined): value is AllowedImageMimeType {
+  return value !== undefined && (ALLOWED_IMAGE_MIME_TYPES as readonly string[]).includes(value)
+}
+
+function isImageFilter(value: string | undefined): value is ImageFilter {
+  return value !== undefined && (IMAGE_FILTERS as readonly string[]).includes(value)
+}
 
 /**
  * `processed_images.params_hash` (docs/03 §7): sha256 of the canonical
@@ -79,27 +107,29 @@ function encodeInSourceFormat(pipeline: Sharp, mimeType: AllowedImageMimeType, q
 }
 
 function toApiProcessedImage(row: ProcessedImageRow): ApiProcessedImage {
+  if (!isImageFilter(row.filter)) {
+    // `processed_images.filter` is a plain `text` column (the route is what
+    // validates it, per the repo's own comment) — a row written by anything
+    // other than this route's validated insert could carry a value outside
+    // `IMAGE_FILTERS`. Surfacing that as a wrong-but-typed `ImageFilter` via
+    // an unchecked cast would silently corrupt the response instead of
+    // failing loudly.
+    throw new ImageDataInvariantError(`processed_images.filter has an unsupported value: ${row.filter}`)
+  }
+
   return {
     id: row.id,
     imageId: row.imageId,
     params: {
       width: row.width,
       height: row.height,
-      filter: row.filter as ImageFilter,
+      filter: row.filter,
       quality: row.quality,
     },
     storagePath: row.storagePath,
     durationMs: row.durationMs,
     createdAt: row.createdAt.toISOString(),
   }
-}
-
-function isUniqueViolation(error: unknown): boolean {
-  return (
-    error !== null &&
-    typeof error === 'object' &&
-    (error as { code?: unknown }).code === UNIQUE_VIOLATION_CODE
-  )
 }
 
 export interface ProcessImageServiceDeps {
@@ -147,7 +177,15 @@ export async function processImage(
     return toApiProcessedImage(existing)
   }
 
-  const mimeType = image.mimeType as AllowedImageMimeType
+  if (!isAllowedImageMimeType(image.mimeType)) {
+    // Upload validation (`imageUploadConstraintsSchema`) is supposed to make
+    // this impossible — a row outside jpeg/png/webp means the invariant was
+    // violated upstream (or the column was written to directly). Fail
+    // loudly rather than let an unchecked cast hand libvips a mime type it
+    // was never validated against.
+    throw new ImageDataInvariantError(`images.mime_type has an unsupported value: ${image.mimeType}`)
+  }
+  const mimeType = image.mimeType
   const extension = MIME_EXTENSIONS[mimeType]
   const originalBuffer = await readUploadedFile(deps.uploadDir, image.storagePath)
 
@@ -179,15 +217,41 @@ export async function processImage(
   } catch (error) {
     // Two parallel identical requests can both miss the lookup above and
     // both finish the sharp work; only one insert wins the unique
-    // (image_id, params_hash) index. The loser refetches and returns the
-    // winner's row instead of surfacing a 500 — "repeat = idempotent" has
-    // to hold under real concurrency too (docs/03 §7, the concurrency
+    // (image_id, params_hash) index. The loser has to refetch and return
+    // the winner's row instead of surfacing a 500 — "repeat = idempotent"
+    // has to hold under real concurrency too (docs/03 §7, the concurrency
     // smoke test), not just for sequential repeats.
-    if (isUniqueViolation(error)) {
-      const winner = await processedImagesRepo.findByImageAndParamsHash(deps.db, input.imageId, paramsHash)
-      if (winner) {
-        return toApiProcessedImage(winner)
-      }
+    //
+    // This used to gate that recovery on the error being a Postgres
+    // unique_violation (SQLSTATE 23505). That check never actually matches
+    // a real failure here: drizzle-orm 0.45 wraps every driver error in a
+    // `DrizzleQueryError` and puts the pg error — and with it `.code` — on
+    // `.cause`, not on the wrapper itself (confirmed against this exact
+    // insert; see the sibling unique-violation assertions in
+    // `repositories/albums.test.ts`, `images.test.ts` and
+    // `processed-images.test.ts`, all of which assert on `cause.code`).
+    // Under real load the loser can also fail with something that isn't a
+    // unique violation at all — a saturated connection pool or a dropped
+    // connection — *after* the winner's row is already durably committed,
+    // which a code-equality check can never anticipate.
+    //
+    // The actual invariant this route promises is "does a matching row
+    // exist now", not "was this specific error a unique violation" — so
+    // always re-check for that row before giving up, whatever the error
+    // was. Only rethrow the original error, unmodified, if the row still
+    // isn't there: a genuine failure must still surface as a real 500,
+    // never get swallowed into a false 200.
+    let winner: ProcessedImageRow | undefined
+    try {
+      winner = await processedImagesRepo.findByImageAndParamsHash(deps.db, input.imageId, paramsHash)
+    } catch {
+      // The recovery read failed too (most likely the same outage that
+      // broke the insert) — the original insert error is the more
+      // informative one to surface.
+      throw error
+    }
+    if (winner) {
+      return toApiProcessedImage(winner)
     }
     throw error
   }
