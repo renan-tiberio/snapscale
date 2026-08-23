@@ -1,3 +1,4 @@
+import fastifyJwt from '@fastify/jwt'
 import fastifySwagger from '@fastify/swagger'
 import fastifySwaggerUi from '@fastify/swagger-ui'
 import { ERROR_CODES, fail } from '@snapscale/shared'
@@ -16,6 +17,10 @@ import {
   type ZodTypeProvider,
 } from 'fastify-type-provider-zod'
 
+import type { Database } from '@/db/index.js'
+import type { Mailer } from '@/services/mailer.js'
+
+import { authRoutes } from '@/routes/auth.js'
 import { healthRoutes } from '@/routes/health.js'
 
 /** Fastify instance typed with the Zod type provider — the shape every route module works with. */
@@ -30,6 +35,15 @@ export type App = FastifyInstance<
 export interface BuildAppOptions {
   /** Passed straight through to Fastify's `logger` option; `false` silences pino in tests. */
   logger?: boolean
+  /**
+   * Auth routes (`/auth/otp/*`, §4/§5) only mount when every dependency
+   * below is supplied — tests that only need `/health` (the bulk of
+   * app.test.ts) build a db-less app and never pay for jwt/rate-limit setup.
+   */
+  db?: Database
+  mailer?: Mailer
+  jwtSecret?: string
+  otpTtlSeconds?: number
 }
 
 /**
@@ -76,6 +90,13 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<App> {
   })
 
   await app.register(healthRoutes)
+
+  if (options.db && options.mailer && options.jwtSecret && options.otpTtlSeconds) {
+    await app.register(fastifyJwt, { secret: options.jwtSecret })
+    await app.register(
+      authRoutes({ db: options.db, mailer: options.mailer, otpTtlSeconds: options.otpTtlSeconds }),
+    )
+  }
 
   return app
 }
