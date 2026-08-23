@@ -6,6 +6,7 @@ import type { ImageProcessOptions } from '@snapscale/shared'
 import { ImageCard } from '@/components/molecules/ImageCard'
 import { UploadButton } from '@/components/molecules/UploadButton'
 import { ProcessImagePanel } from '@/components/organisms/ProcessImagePanel'
+import { useAuthContext } from '@/context/AuthContext'
 import { useAlbums } from '@/hooks/queries/useAlbums'
 import { useImages } from '@/hooks/queries/useImages'
 import { useProcessImage } from '@/hooks/queries/useProcessImage'
@@ -14,6 +15,7 @@ import { imageFileUrl, processedImageUrl } from '@/utils/imageUrls'
 
 export function AlbumDetail() {
   const { albumId = '' } = useParams()
+  const { token } = useAuthContext()
   const { albums } = useAlbums()
   const { images, isLoading, error, uploadImage, isUploading, uploadError } = useImages(albumId)
   const { processImage, processedImage, isProcessing, processError, reset } = useProcessImage()
@@ -69,7 +71,7 @@ export function AlbumDetail() {
           <li key={image.id}>
             <ImageCard
               image={image}
-              src={imageFileUrl(image.id)}
+              src={imageFileUrl(image.id, token)}
               onProcess={handleSelect}
               isSelected={image.id === selectedImageId}
             />
@@ -84,7 +86,7 @@ export function AlbumDetail() {
           onClose={handleClose}
           isProcessing={isProcessing}
           errorMessage={processError?.message ?? null}
-          resultUrl={processedImage === null ? null : processedImageUrl(processedImage.storagePath)}
+          resultUrl={processedImage === null ? null : processedImageUrl(processedImage.storagePath, token)}
         />
       )}
     </main>
