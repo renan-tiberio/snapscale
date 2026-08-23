@@ -1,0 +1,53 @@
+import { renderHook } from '@testing-library/react'
+import { describe, expect, it, vi } from 'vitest'
+
+import { useEventListener } from './useEventListener'
+
+describe('useEventListener', () => {
+  it('invokes the handler when the window event fires', () => {
+    const handler = vi.fn()
+    renderHook(() => useEventListener(window, 'online', handler))
+
+    window.dispatchEvent(new Event('online'))
+
+    expect(handler).toHaveBeenCalledTimes(1)
+  })
+
+  it('always calls the latest handler without re-subscribing', () => {
+    const firstHandler = vi.fn()
+    const { rerender } = renderHook(
+      ({ onEvent }) => useEventListener(window, 'online', onEvent),
+      { initialProps: { onEvent: firstHandler } },
+    )
+
+    const secondHandler = vi.fn()
+    rerender({ onEvent: secondHandler })
+    window.dispatchEvent(new Event('online'))
+
+    expect(firstHandler).not.toHaveBeenCalled()
+    expect(secondHandler).toHaveBeenCalledTimes(1)
+  })
+
+  it('subscribes to an element event and cleans up on unmount', () => {
+    const element = document.createElement('button')
+    document.body.appendChild(element)
+    const handler = vi.fn()
+
+    const { unmount } = renderHook(() => useEventListener(element, 'click', handler))
+    element.click()
+
+    expect(handler).toHaveBeenCalledTimes(1)
+
+    unmount()
+    element.click()
+
+    expect(handler).toHaveBeenCalledTimes(1)
+    document.body.removeChild(element)
+  })
+
+  it('does nothing while the element ref is null', () => {
+    const handler = vi.fn()
+
+    expect(() => renderHook(() => useEventListener(null, 'click', handler))).not.toThrow()
+  })
+})
