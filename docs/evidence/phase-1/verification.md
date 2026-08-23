@@ -16,10 +16,13 @@ Verifier: last-check gate run, no application code/tests/configs modified in the
 - Docker: `29.6.2` (build dfc4efb)
 - Docker Compose: `v5.3.1`
 
-## Open issues (read this first)
+## Open issues as originally found (historical — both resolved, see "Resolved after verification" below)
 
-Two real problems were found. Neither was fixed — application code, tests, and configs were left
-untouched per the verification mandate.
+Two real problems were found. Neither was fixed at the time this section was written — application
+code, tests, and configs were left untouched per the verification mandate then in effect. Both were
+fixed in a later pass; the original finding text below is left exactly as written for audit history,
+and the fix + new proof for each is recorded in "## Resolved after verification (FIX-E, 2026-08-23)"
+further down this document.
 
 ### 1. The api suite still flakes — a different failure than the one the regression fix targeted
 
@@ -114,6 +117,106 @@ deployment as broken.
 
 Neither issue was fixed here, per the "you may NOT edit application code, tests, or configs" rule for
 this gate.
+
+## Resolved after verification (FIX-E, 2026-08-23)
+
+Both open issues above were fixed in a follow-up pass (`test(api): make mailhog container startup
+deterministic`, `fix(infra): healthcheck the web container over ipv4`). The original findings above
+are left untouched for audit history; this section records what changed and the new proof.
+
+### 1. api suite flake — fixed
+
+Root cause, confirmed by reading testcontainers 12.1.0's own source
+(`generic-container/inspect-container-util-ports-exposed.js`): the specific error
+(`Timed out after 10000ms while waiting for container ports to be bound to the host`) comes from a
+private, hardcoded `timeout = 10_000` in `inspectContainerUntilPortsExposed()` — NOT from the wait
+strategy's `startupTimeoutMs` (which already defaulted to 60s, and is unrelated to this failure).
+`withStartupTimeout()` / `Wait.forHttp(...)` cannot raise this specific window in this testcontainers
+version; there is no public API or documented env var that does. `startMailhog()` used to be called
+from `apps/api/src/routes/auth.test.ts`'s own `beforeAll`, which put that 10s window in direct
+contention with sibling test files' CPU-bound work (e.g. `sharp` encodes) under vitest's
+`maxThreads: 4` pool (`apps/api/vitest.config.ts`, left unchanged, cap still 4).
+
+Fix applied:
+
+- **MailHog now starts once per run from `apps/api/test/global-setup.ts`**, alongside Postgres,
+  exactly mirroring Postgres's already-reliable pattern — before any test file's worker thread exists
+  to contend with it. Container lifecycle code was split into a new `apps/api/test/mailhog-container.ts`
+  (no `vitest` import — `globalSetup` runs in a separate vitest context, and importing `vitest` there
+  breaks vitest's own worker state) from `apps/api/test/mailhog.ts` (test-file-side `connectToMailhog()` /
+  `waitForMessagesTo()`, uses `inject()`).
+- The wait strategy was still upgraded from `Wait.forListeningPorts()` to
+  `Wait.forHttp('/api/v2/messages', 8025).forStatusCode(200)` with an explicit `withStartupTimeout(60_000)`
+  — a stronger readiness guarantee (MailHog's HTTP API actually answering, not just the TCP port being
+  open) for the phase that IS configurable, even though it wasn't the phase that was flaking.
+- Test isolation preserved: `auth.test.ts`'s `beforeEach` now also calls `mailhog.purge()`
+  (`DELETE /api/v1/messages`) alongside the existing `truncateAll(database)`, so tests still only ever
+  see their own messages despite sharing one container for the whole run.
+- Defensive teardown: `afterAll` now guards `app`/`database` before closing/destroying them, so a
+  `beforeAll` failure reports as itself instead of being buried under
+  `TypeError: Cannot read properties of undefined (reading 'close')`.
+- No assertion in `auth.test.ts` changed — confirmed with `git diff apps/api/src/routes/auth.test.ts`;
+  only imports and the `beforeAll`/`afterAll`/`beforeEach` hook bodies differ.
+
+Proof — `pnpm --filter @snapscale/api test`, run 10 consecutive times:
+
+```
+RUN 1  EXIT=0
+RUN 2  EXIT=0
+RUN 3  EXIT=0
+RUN 4  EXIT=0
+RUN 5  EXIT=0
+RUN 6  EXIT=0
+RUN 7  EXIT=0
+RUN 8  EXIT=0
+RUN 9  EXIT=0
+RUN 10 EXIT=0
+```
+
+**Pass count: 10/10.** Every run reported identical counts: `Test Files 28 passed (28)`,
+`Tests 213 passed (213)`. No re-runs were discarded — this is the first and only 10-run sequence
+executed after the fix.
+
+### 2. `web` container HEALTHCHECK — fixed
+
+Fix applied: `apps/web/Dockerfile`'s `HEALTHCHECK` now targets `http://127.0.0.1:5173/` instead of
+`http://localhost:5173/` — the one-line client-side fix, since the app/nginx side was already correct
+and the bug was purely in what busybox `wget` resolved `localhost` to inside the container. nginx's own
+`listen` directive was left untouched (dual-stack `listen [::]:5173` was the alternative but the
+client-side fix is smaller and doesn't change the app's own network config).
+
+Proof — isolated compose project `snapscale-fixe` (postgres 5434, mailhog 1026/8026, api 4001, web
+5174), built from the post-fix `docker-compose.yml`/`Dockerfile`s:
+
+```
+$ docker compose -p snapscale-fixe ps
+NAME                        IMAGE                COMMAND                  SERVICE    CREATED          STATUS                    PORTS
+snapscale-fixe-api-1        snapscale-fixe-api   "docker-entrypoint.s…"   api        25 seconds ago   Up 18 seconds (healthy)   0.0.0.0:4001->4000/tcp, [::]:4001->4000/tcp
+snapscale-fixe-mailhog-1    mailhog/mailhog      "MailHog"                mailhog    25 seconds ago   Up 24 seconds (healthy)   0.0.0.0:1026->1025/tcp, [::]:1026->1025/tcp, 0.0.0.0:8026->8025/tcp, [::]:8026->8025/tcp
+snapscale-fixe-postgres-1   postgres:16-alpine   "docker-entrypoint.s…"   postgres   25 seconds ago   Up 24 seconds (healthy)   0.0.0.0:5434->5432/tcp, [::]:5434->5432/tcp
+snapscale-fixe-web-1        snapscale-fixe-web   "/docker-entrypoint.…"   web        25 seconds ago   Up 12 seconds (healthy)   0.0.0.0:5174->5173/tcp, [::]:5174->5173/tcp
+```
+
+`web` reported `healthy` on the very first poll (previously stayed `unhealthy` the entire run). E2E
+against this same stack (`E2E_WEB_URL=http://localhost:5174 E2E_API_URL=http://localhost:4001
+E2E_MAILHOG_URL=http://localhost:8026 pnpm --filter @snapscale/e2e exec playwright test`): 2/2 passed.
+Full verbatim output appended to [`e2e-compose-run.txt`](./e2e-compose-run.txt) under the
+"POST-FIX RUN — FIX-E" delimiter (original pre-fix run left in place above it).
+
+Teardown: `docker compose -p snapscale-fixe down -v`, then confirmed `snapscale-postgres-1` and
+`snapscale-mailhog-1` (the coordinator's own stack) were still `Up ... (healthy)` — untouched.
+
+### Re-run of the other checks after the fix
+
+- `pnpm turbo run typecheck lint`: 10/10 tasks successful, exit 0.
+- `pnpm turbo run test:coverage --filter=@snapscale/api --filter=@snapscale/web
+  --filter=@snapscale/shared --filter=@snapscale/otel --force`: 4/4 tasks successful, exit 0.
+  Coverage unchanged/still ≥80% on every dimension for every package: otel 98.49/90.00/100.00/98.49,
+  shared 100/100/100/100, web 98.04/93.26/100.00/98.04, api 97.36/90.40/95.28/97.36 (stmts/branch/funcs/lines).
+- `git diff --stat` for this fix touched only `apps/api/test/mailhog.ts`,
+  `apps/api/test/mailhog-container.ts` (new), `apps/api/test/global-setup.ts`,
+  `apps/api/src/routes/auth.test.ts` (hooks only, no assertions), and `apps/web/Dockerfile` — nothing
+  outside `apps/api/test/**`, `apps/api/src/routes/auth.test.ts`, and `apps/web/Dockerfile`.
 
 ## Part 1 — verification results
 
@@ -265,7 +368,12 @@ $ git status --porcelain
 | 6 | Teardown / coordinator stack untouched | PASS |
 | 7 | Integrity (no skip/only/todo, single author, no AI attribution, clean tree) | PASS |
 
-Two open issues stand: the api suite is not fully deterministic (9/10 over 10 solo runs, a different
-failure mode than the one the recent fix targeted), and the `web` container's own Docker HEALTHCHECK
-is broken (cosmetic under the current compose graph, since nothing depends on it, but a real defect).
-Everything else passed as specified, against real `docker compose up --build`, not dev servers.
+Two open issues stood at the time this summary was written: the api suite was not fully deterministic
+(9/10 over 10 solo runs, a different failure mode than the one the recent fix targeted), and the `web`
+container's own Docker HEALTHCHECK was broken (cosmetic under the current compose graph, since nothing
+depends on it, but a real defect). Everything else passed as specified, against real
+`docker compose up --build`, not dev servers.
+
+**Update (2026-08-23, FIX-E):** both issues above are now resolved — see
+"## Resolved after verification (FIX-E, 2026-08-23)". Item 4 is now a full **PASS** (api alone: 10/10
+across 10 consecutive runs), and the `web` HEALTHCHECK now reports `healthy`.

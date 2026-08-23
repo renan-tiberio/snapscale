@@ -17,3 +17,58 @@ Running 2 tests using 1 worker
   2 passed (1.5s)
 
 Exit code: 0
+
+================================================================================
+POST-FIX RUN — FIX-E (2026-08-23)
+================================================================================
+
+Context: proves the two defects recorded under "Resolved after verification"
+in verification.md are actually fixed — (1) apps/api/test/mailhog.ts +
+apps/api/test/mailhog-container.ts + apps/api/test/global-setup.ts
+(MailHog container startup determinism) and (2) apps/web/Dockerfile
+(HEALTHCHECK over 127.0.0.1 instead of `localhost`). Run against an
+isolated compose project (`-p snapscale-fixe`), built from the
+post-fix committed Dockerfiles/docker-compose.yml, with the same port
+remapping scheme as the original run above (postgres 5434, mailhog
+1026/8026, api 4001, web 5174).
+
+$ docker compose -p snapscale-fixe -f docker-compose.yml -f <override> up -d --build
+... (full build + up log, all 5 services created)
+
+$ docker compose -p snapscale-fixe ps
+NAME                        IMAGE                COMMAND                  SERVICE    CREATED          STATUS                    PORTS
+snapscale-fixe-api-1        snapscale-fixe-api   "docker-entrypoint.s…"   api        25 seconds ago   Up 18 seconds (healthy)   0.0.0.0:4001->4000/tcp, [::]:4001->4000/tcp
+snapscale-fixe-mailhog-1    mailhog/mailhog      "MailHog"                mailhog    25 seconds ago   Up 24 seconds (healthy)   0.0.0.0:1026->1025/tcp, [::]:1026->1025/tcp, 0.0.0.0:8026->8025/tcp, [::]:8026->8025/tcp
+snapscale-fixe-postgres-1   postgres:16-alpine   "docker-entrypoint.s…"   postgres   25 seconds ago   Up 24 seconds (healthy)   0.0.0.0:5434->5432/tcp, [::]:5434->5432/tcp
+snapscale-fixe-web-1        snapscale-fixe-web   "/docker-entrypoint.…"   web        25 seconds ago   Up 12 seconds (healthy)   0.0.0.0:5174->5173/tcp, [::]:5174->5173/tcp
+
+`web` is `healthy` on the very first poll — previously it stayed `unhealthy`
+for the whole run (see "Resolved after verification" #2 in verification.md).
+
+Command:
+  E2E_WEB_URL=http://localhost:5174 E2E_API_URL=http://localhost:4001 E2E_MAILHOG_URL=http://localhost:8026 \
+    pnpm --filter @snapscale/e2e exec playwright test
+
+Verbatim output:
+
+.                                        |  WARN  Unsupported engine: wanted: {"node":"22.x"} (current: {"node":"v24.18.1","pnpm":"9.15.0"})
+
+Running 2 tests using 1 worker
+
+  ✓  1 [chromium] › tests/gallery-journey.spec.ts:37:1 › full gallery journey: OTP sign-in, album, upload, process, rendered result (745ms)
+  ✓  2 [chromium] › tests/gallery-journey.spec.ts:134:1 › an invalid OTP code shows an error and does not authenticate (312ms)
+
+  2 passed (1.5s)
+
+Exit code: 0
+
+$ docker compose -p snapscale-fixe down -v
+... all snapscale-fixe-* containers/network/volumes removed
+
+Post-teardown docker ps:
+snapscale-postgres-1   Up 2 hours (healthy)
+snapscale-mailhog-1    Up 2 hours (healthy)
+
+Confirmed: the coordinator's stack (snapscale-postgres-1 / snapscale-mailhog-1)
+was never stopped, restarted, or otherwise disturbed.
+================================================================================
