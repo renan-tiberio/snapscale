@@ -12,13 +12,13 @@ function ControlledTextInput() {
 
 describe('TextInput', () => {
   it('renders with an accessible label', () => {
-    render(<TextInput label="Email" value="" onChange={() => {}} />)
+    render(<TextInput label="Email" value="" onChange={() => undefined} />)
 
     expect(screen.getByLabelText('Email')).toBeInTheDocument()
   })
 
   it('reflects the controlled value', () => {
-    render(<TextInput label="Email" value="hello@example.com" onChange={() => {}} />)
+    render(<TextInput label="Email" value="hello@example.com" onChange={() => undefined} />)
 
     expect(screen.getByLabelText('Email')).toHaveValue('hello@example.com')
   })
@@ -31,5 +31,29 @@ describe('TextInput', () => {
     await user.type(input, 'ab')
 
     expect(input).toHaveValue('ab')
+  })
+
+  it('uses a caller-provided id instead of a generated one', () => {
+    render(<TextInput label="Email" value="" onChange={() => undefined} id="email-field" />)
+
+    expect(screen.getByLabelText('Email')).toHaveAttribute('id', 'email-field')
+  })
+
+  it('keeps the same input id across a re-render with unchanged props', () => {
+    const { rerender } = render(<TextInput label="Email" value="" onChange={() => undefined} />)
+    const idBeforeRerender = screen.getByLabelText('Email').id
+
+    rerender(<TextInput label="Email" value="" onChange={() => undefined} />)
+
+    expect(screen.getByLabelText('Email').id).toBe(idBeforeRerender)
+  })
+
+  it('picks up a caller-provided className when re-rendered', () => {
+    const { rerender } = render(<TextInput label="Email" value="" onChange={() => undefined} />)
+    rerender(
+      <TextInput label="Email" value="" onChange={() => undefined} className="w-full" />,
+    )
+
+    expect(screen.getByLabelText('Email')).toHaveClass('w-full')
   })
 })

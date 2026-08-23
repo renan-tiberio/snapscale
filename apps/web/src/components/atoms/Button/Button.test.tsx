@@ -40,4 +40,31 @@ describe('Button', () => {
 
     expect(screen.getByRole('button', { name: 'Cancel' })).toHaveClass('bg-transparent')
   })
+
+  it('merges a caller-provided className with the variant classes', () => {
+    render(<Button className="w-full">Save</Button>)
+
+    expect(screen.getByRole('button', { name: 'Save' })).toHaveClass('w-full', 'bg-brand-600')
+  })
+
+  it('keeps rendering correctly across a re-render with unchanged props', () => {
+    const { rerender } = render(<Button variant="secondary">Save</Button>)
+    rerender(<Button variant="secondary">Save</Button>)
+
+    expect(screen.getByRole('button', { name: 'Save' })).toHaveClass('bg-transparent')
+  })
+
+  it('switches variant classes when re-rendered with a different variant', () => {
+    const { rerender } = render(<Button variant="primary">Save</Button>)
+    rerender(<Button variant="secondary">Save</Button>)
+
+    expect(screen.getByRole('button', { name: 'Save' })).toHaveClass('bg-transparent')
+  })
+
+  it('picks up a caller-provided className when re-rendered', () => {
+    const { rerender } = render(<Button>Save</Button>)
+    rerender(<Button className="w-full">Save</Button>)
+
+    expect(screen.getByRole('button', { name: 'Save' })).toHaveClass('w-full')
+  })
 })

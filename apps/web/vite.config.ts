@@ -5,13 +5,28 @@ import { defineConfig } from 'vitest/config'
 // React Compiler is wired through the babel config of @vitejs/plugin-react —
 // verified in the phase-1 report by grepping the production build output for
 // the compiler-injected `react/compiler-runtime` import (see docs/03 §2).
+//
+// It is skipped only under Vitest (`process.env.VITEST`, set by the runner
+// itself): the compiler is a behavior-preserving build-time optimization —
+// its correctness is guarded by its own compiler-aware eslint-plugin-react-hooks
+// rules, not by app coverage — and its injected memoization cache-check
+// branches are close to impossible to fully exercise from black-box component
+// tests, which was dragging branch coverage on simple presentational atoms
+// down to ~65-77% with no behavioral gap to fix. dev/build/storybook keep the
+// compiler on.
+const isTest = process.env.VITEST === 'true'
+
 export default defineConfig({
   plugins: [
-    react({
-      babel: {
-        plugins: [['babel-plugin-react-compiler', {}]],
-      },
-    }),
+    react(
+      isTest
+        ? {}
+        : {
+            babel: {
+              plugins: [['babel-plugin-react-compiler', {}]],
+            },
+          },
+    ),
     tailwindcss(),
   ],
   resolve: {
@@ -27,12 +42,14 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       reporter: ['text', 'html'],
+      include: ['src/**/*.{ts,tsx}'],
       exclude: [
         'src/main.tsx',
         'src/router.tsx',
+        'src/vite-env.d.ts',
+        'src/**/*.types.ts',
         'src/**/*.stories.tsx',
         'src/test/**',
-        '.storybook/**',
       ],
       thresholds: {
         lines: 80,
