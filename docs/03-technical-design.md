@@ -115,8 +115,12 @@ Optimized for one thing: **anyone opens the repo and knows where everything live
 
 ```
 src/
-├── components/     # atomic design: atoms/ molecules/ organisms/ — the whole UI kit
-├── pages/          # route screens — compose components, wire hooks
+├── components/     # atomic design — the FULL hierarchy, pages included
+│   ├── atoms/
+│   ├── molecules/
+│   ├── organisms/
+│   └── pages/      #   route-level components (React Router targets), one folder per route
+│       └── Login/  #   Login.tsx + Login.types.ts + Login.test.tsx + index.ts
 ├── hooks/          # ALL reusable React logic, including TanStack Query hooks
 │   ├── queries/    #   one hook per domain: useUser, useAlbums, useImages, useProcessImage
 │   └── ...         #   generic hooks: useDebounce, useDisclosure, …
@@ -128,14 +132,21 @@ src/
 └── router.tsx / main.tsx
 ```
 
+`pages/` lives **inside** `components/` because this is React Router, not Next: there
+is no filesystem routing, so a page is just the top of the atomic hierarchy
+(atoms → molecules → organisms → pages). Each route gets its own folder with the same
+split-file anatomy as any component — page code and its test never sit loose side by
+side in a shared folder. Stories are optional for pages (they exist for the kit,
+mandatory atoms→organisms).
+
 - **React Compiler on** (Vite + `babel-plugin-react-compiler`): memoization is
   automatic — manual `useMemo`/`useCallback`/`React.memo` only with a comment
   justifying it; `eslint-plugin-react-hooks` (compiler-aware rules) guards violations.
-- **UI separated from logic**: `components/` renders props, nothing else. Data flows
-  in through `pages/` wiring `hooks/` — a component importing from `services/` fails
-  review; a page inlining business logic gets extracted to a hook.
-- **Atomic design in `components/`**: `atoms/`, `molecules/`, `organisms/`. Every
-  component is a folder with split files:
+- **UI separated from logic**: atoms→organisms render props, nothing else. Data flows
+  in through `components/pages/` wiring `hooks/` — a non-page component importing from
+  `services/` fails review; a page inlining business logic gets extracted to a hook.
+- **Atomic design in `components/`**: `atoms/`, `molecules/`, `organisms/`, `pages/`.
+  Every component is a folder with split files:
 
   ```
   components/atoms/Button/
