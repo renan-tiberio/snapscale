@@ -12,7 +12,7 @@ import { useAuth } from '@/hooks/queries/useAuth'
 const OTP_LENGTH = 6
 const MAILHOG_URL = 'http://localhost:8025'
 
-export function LoginPage() {
+export function Login() {
   const {
     isAuthenticated,
     requestOtp,

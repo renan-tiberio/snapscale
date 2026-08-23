@@ -4,7 +4,7 @@ import { CreateAlbumForm } from '@/components/organisms/CreateAlbumForm'
 import { useAlbums } from '@/hooks/queries/useAlbums'
 import { useAuth } from '@/hooks/queries/useAuth'
 
-export function AlbumsPage() {
+export function Albums() {
   const { user, logout } = useAuth()
   const { albums, isLoading, error, createAlbum, isCreating, createError, deleteAlbum, isDeleting } =
     useAlbums()

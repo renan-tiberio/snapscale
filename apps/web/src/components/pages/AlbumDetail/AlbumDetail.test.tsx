@@ -19,7 +19,7 @@ function renderAlbum() {
   return renderApp([ALBUM_ROUTE])
 }
 
-describe('AlbumDetailPage', () => {
+describe('AlbumDetail', () => {
   it('shows the album name and its images', async () => {
     renderAlbum()
 

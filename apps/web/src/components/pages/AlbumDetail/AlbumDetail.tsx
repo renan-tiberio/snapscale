@@ -12,7 +12,7 @@ import { useProcessImage } from '@/hooks/queries/useProcessImage'
 import { imageFileUrl, processedImageUrl } from '@/utils/imageUrls'
 
 
-export function AlbumDetailPage() {
+export function AlbumDetail() {
   const { albumId = '' } = useParams()
   const { albums } = useAlbums()
   const { images, isLoading, error, uploadImage, isUploading, uploadError } = useImages(albumId)

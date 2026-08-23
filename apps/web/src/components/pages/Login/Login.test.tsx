@@ -15,7 +15,7 @@ async function requestCode(user: ReturnType<typeof userEvent.setup>) {
   await user.click(screen.getByRole('button', { name: 'Send code' }))
 }
 
-describe('LoginPage', () => {
+describe('Login', () => {
   it('walks the user from email to code to the album list', async () => {
     const user = userEvent.setup()
     renderApp(['/login'])

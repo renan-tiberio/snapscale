@@ -2,12 +2,12 @@ import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it } from 'vitest'
 
-import { HomePage } from './HomePage'
+import { Home } from './Home'
 
-describe('HomePage', () => {
+describe('Home', () => {
   it('lets the user type an email and clear it again', async () => {
     const user = userEvent.setup()
-    render(<HomePage />)
+    render(<Home />)
 
     const input = screen.getByLabelText('Email')
     await user.type(input, 'a@b.com')

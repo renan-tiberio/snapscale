@@ -8,7 +8,7 @@ import { API_BASE } from '@/test/msw/handlers'
 import { server } from '@/test/msw/server'
 import { renderApp, seedSession } from '@/test/utils'
 
-describe('AlbumsPage', () => {
+describe('Albums', () => {
   it('lists the albums of the signed-in user', async () => {
     seedSession()
 
