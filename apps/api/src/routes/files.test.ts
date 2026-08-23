@@ -273,4 +273,69 @@ describe('GET /files/* and query-token auth (docs/03 §4/§7)', () => {
     expect(response.statusCode).toBe(401)
     expect(response.json()).toMatchObject({ success: false, error: { code: ERROR_CODES.UNAUTHORIZED } })
   })
+
+  // --- caching: file tokens rotate every 60s, the bytes do not ---
+
+  it('serves a file with a private Cache-Control and an ETag', async () => {
+    const image = await uploadImage(ownerToken)
+
+    const response = await app.inject({
+      method: 'GET',
+      url: `/files/${image.storagePath}?token=${ownerFileToken}`,
+    })
+
+    expect(response.statusCode).toBe(200)
+    // Private: these bytes belong to one account and must never be held by a
+    // shared cache. Short: the URL is authorized by a 60s token.
+    expect(response.headers['cache-control']).toMatch(/private/)
+    expect(response.headers['cache-control']).toMatch(/max-age=\d+/)
+    expect(response.headers.etag).toBeDefined()
+  })
+
+  it('answers a revalidation carrying the ETag with 304 and no body — a rotated token must not force a re-download', async () => {
+    const image = await uploadImage(ownerToken)
+
+    const firstResponse = await app.inject({
+      method: 'GET',
+      url: `/files/${image.storagePath}?token=${ownerFileToken}`,
+    })
+    const etag = firstResponse.headers.etag as string
+
+    // A brand-new file token — the exact case the finding describes: the URL
+    // changed, the bytes did not.
+    const rotatedToken = await app.jwt.sign({ sub: ownerId, scope: 'file' })
+    const revalidation = await app.inject({
+      method: 'GET',
+      url: `/files/${image.storagePath}?token=${rotatedToken}`,
+      headers: { 'if-none-match': etag },
+    })
+
+    expect(revalidation.statusCode).toBe(304)
+    expect(revalidation.rawPayload).toHaveLength(0)
+  })
+
+  it('gives the same ETag to two reads of the same unchanged file', async () => {
+    const image = await uploadImage(ownerToken)
+    const url = `/files/${image.storagePath}?token=${ownerFileToken}`
+
+    const [firstResponse, secondResponse] = await Promise.all([
+      app.inject({ method: 'GET', url }),
+      app.inject({ method: 'GET', url }),
+    ])
+
+    expect(firstResponse.headers.etag).toBe(secondResponse.headers.etag)
+  })
+
+  it('answers the 404 envelope — not a half-sent stream — when the row exists but the blob is gone', async () => {
+    const image = await uploadImage(ownerToken)
+    await rm(join(uploadDir, image.storagePath))
+
+    const response = await app.inject({
+      method: 'GET',
+      url: `/files/${image.storagePath}?token=${ownerFileToken}`,
+    })
+
+    expect(response.statusCode).toBe(404)
+    expect(response.json()).toMatchObject({ success: false, error: { code: ERROR_CODES.NOT_FOUND } })
+  })
 })

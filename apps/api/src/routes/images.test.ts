@@ -331,6 +331,64 @@ describe('image routes (/images)', () => {
     }
   })
 
+  it('answers the 404 envelope when the image row exists but its blob is gone from disk', async () => {
+    const uploaded = (
+      await upload(ownerToken, { albumId }, { filename: 'sunset.png', contentType: 'image/png', data: pngBuffer })
+    ).json() as Envelope<ImageBody>
+    await rm(join(uploadDir, uploaded.data?.storagePath ?? ''))
+
+    const response = await app.inject({
+      method: 'GET',
+      url: `/images/${uploaded.data?.id ?? ''}/file`,
+      headers: authHeader(ownerToken),
+    })
+
+    expect(response.statusCode).toBe(404)
+    expect(response.json()).toMatchObject({ success: false, error: { code: ERROR_CODES.NOT_FOUND } })
+  })
+
+  it('serves GET /images/:id/file with a private Cache-Control and an ETag that revalidates to 304', async () => {
+    const uploaded = (
+      await upload(ownerToken, { albumId }, { filename: 'sunset.png', contentType: 'image/png', data: pngBuffer })
+    ).json() as Envelope<ImageBody>
+    const url = `/images/${uploaded.data?.id ?? ''}/file`
+
+    const first = await app.inject({ method: 'GET', url, headers: authHeader(ownerToken) })
+    expect(first.headers['cache-control']).toMatch(/private/)
+    expect(first.headers.etag).toBeDefined()
+
+    const revalidation = await app.inject({
+      method: 'GET',
+      url,
+      headers: { ...authHeader(ownerToken), 'if-none-match': first.headers.etag as string },
+    })
+
+    expect(revalidation.statusCode).toBe(304)
+    expect(revalidation.rawPayload).toHaveLength(0)
+  })
+
+  it('surfaces a row whose mime_type is outside the allowlist as a 500, never as a typed lie', async () => {
+    // `images.mime_type` is a plain `text` column: only the upload route
+    // enforces the allowlist. A row written by anything else (a migration, a
+    // future importer) would otherwise be cast straight to
+    // `AllowedImageMimeType` and served to the client as if it were valid.
+    const uploaded = (
+      await upload(ownerToken, { albumId }, { filename: 'sunset.png', contentType: 'image/png', data: pngBuffer })
+    ).json() as Envelope<ImageBody>
+    await database.pool.query(`update images set mime_type = 'application/pdf' where id = $1`, [
+      uploaded.data?.id,
+    ])
+
+    const response = await app.inject({
+      method: 'GET',
+      url: `/images/${uploaded.data?.id ?? ''}`,
+      headers: authHeader(ownerToken),
+    })
+
+    expect(response.statusCode).toBe(500)
+    expect(response.json()).toMatchObject({ success: false, error: { code: ERROR_CODES.INTERNAL } })
+  })
+
   // --- GET /images/:id — the entity, not the file (docs/03 §4) ---
 
   it('gets one of the caller\'s images by id — the metadata entity, not the bytes', async () => {
