@@ -19,18 +19,16 @@ describe('createAlbumSchema', () => {
     const result = createAlbumSchema.safeParse({ description: 'Beach days' })
 
     expect(result.success).toBe(false)
-    if (!result.success) {
-      expect(result.error.issues[0]?.path).toEqual(['name'])
-    }
+    if (result.success) throw new Error('expected parse to fail')
+    expect(result.error.issues[0]?.path).toEqual(['name'])
   })
 
   it('rejects an empty name', () => {
     const result = createAlbumSchema.safeParse({ name: '' })
 
     expect(result.success).toBe(false)
-    if (!result.success) {
-      expect(result.error.issues[0]?.path).toEqual(['name'])
-    }
+    if (result.success) throw new Error('expected parse to fail')
+    expect(result.error.issues[0]?.path).toEqual(['name'])
   })
 })
 
@@ -51,9 +49,8 @@ describe('updateAlbumSchema', () => {
     const result = updateAlbumSchema.safeParse({ name: '' })
 
     expect(result.success).toBe(false)
-    if (!result.success) {
-      expect(result.error.issues[0]?.path).toEqual(['name'])
-    }
+    if (result.success) throw new Error('expected parse to fail')
+    expect(result.error.issues[0]?.path).toEqual(['name'])
   })
 })
 
@@ -77,8 +74,7 @@ describe('albumSchema', () => {
     const result = albumSchema.safeParse({ ...validAlbum, id: '123' })
 
     expect(result.success).toBe(false)
-    if (!result.success) {
-      expect(result.error.issues[0]?.path).toEqual(['id'])
-    }
+    if (result.success) throw new Error('expected parse to fail')
+    expect(result.error.issues[0]?.path).toEqual(['id'])
   })
 })

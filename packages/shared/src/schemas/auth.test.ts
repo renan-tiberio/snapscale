@@ -13,19 +13,17 @@ describe('requestOtpSchema', () => {
     const result = requestOtpSchema.safeParse({ email: 'not-an-email' })
 
     expect(result.success).toBe(false)
-    if (!result.success) {
-      expect(result.error.issues[0]?.path).toEqual(['email'])
-      expect(result.error.issues[0]?.message).toBeTruthy()
-    }
+    if (result.success) throw new Error('expected parse to fail')
+    expect(result.error.issues[0]?.path).toEqual(['email'])
+    expect(result.error.issues[0]?.message).toBeTruthy()
   })
 
   it('rejects a missing email field', () => {
     const result = requestOtpSchema.safeParse({})
 
     expect(result.success).toBe(false)
-    if (!result.success) {
-      expect(result.error.issues[0]?.path).toEqual(['email'])
-    }
+    if (result.success) throw new Error('expected parse to fail')
+    expect(result.error.issues[0]?.path).toEqual(['email'])
   })
 })
 
@@ -40,36 +38,32 @@ describe('verifyOtpSchema', () => {
     const result = verifyOtpSchema.safeParse({ email: 'nope', code: '123456' })
 
     expect(result.success).toBe(false)
-    if (!result.success) {
-      expect(result.error.issues.some((issue) => issue.path[0] === 'email')).toBe(true)
-    }
+    if (result.success) throw new Error('expected parse to fail')
+    expect(result.error.issues.some((issue) => issue.path[0] === 'email')).toBe(true)
   })
 
   it('rejects a code shorter than 6 digits', () => {
     const result = verifyOtpSchema.safeParse({ email: 'user@example.com', code: '12345' })
 
     expect(result.success).toBe(false)
-    if (!result.success) {
-      expect(result.error.issues[0]?.path).toEqual(['code'])
-    }
+    if (result.success) throw new Error('expected parse to fail')
+    expect(result.error.issues[0]?.path).toEqual(['code'])
   })
 
   it('rejects a code longer than 6 digits', () => {
     const result = verifyOtpSchema.safeParse({ email: 'user@example.com', code: '1234567' })
 
     expect(result.success).toBe(false)
-    if (!result.success) {
-      expect(result.error.issues[0]?.path).toEqual(['code'])
-    }
+    if (result.success) throw new Error('expected parse to fail')
+    expect(result.error.issues[0]?.path).toEqual(['code'])
   })
 
   it('rejects a code containing non-digit characters', () => {
     const result = verifyOtpSchema.safeParse({ email: 'user@example.com', code: 'abcdef' })
 
     expect(result.success).toBe(false)
-    if (!result.success) {
-      expect(result.error.issues[0]?.path).toEqual(['code'])
-    }
+    if (result.success) throw new Error('expected parse to fail')
+    expect(result.error.issues[0]?.path).toEqual(['code'])
   })
 })
 
@@ -90,9 +84,8 @@ describe('sessionResponseSchema', () => {
     const result = sessionResponseSchema.safeParse({ user: validUser })
 
     expect(result.success).toBe(false)
-    if (!result.success) {
-      expect(result.error.issues.some((issue) => issue.path[0] === 'token')).toBe(true)
-    }
+    if (result.success) throw new Error('expected parse to fail')
+    expect(result.error.issues.some((issue) => issue.path[0] === 'token')).toBe(true)
   })
 
   it('rejects a user with a malformed id', () => {
@@ -102,8 +95,7 @@ describe('sessionResponseSchema', () => {
     })
 
     expect(result.success).toBe(false)
-    if (!result.success) {
-      expect(result.error.issues.some((issue) => issue.path.join('.') === 'user.id')).toBe(true)
-    }
+    if (result.success) throw new Error('expected parse to fail')
+    expect(result.error.issues.some((issue) => issue.path.join('.') === 'user.id')).toBe(true)
   })
 })

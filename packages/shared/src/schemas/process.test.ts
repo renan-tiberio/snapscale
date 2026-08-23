@@ -14,18 +14,16 @@ describe('processImageParamsSchema — width/height bounds', () => {
     const result = processImageParamsSchema.safeParse({ ...validBase, width: 15 })
 
     expect(result.success).toBe(false)
-    if (!result.success) {
-      expect(result.error.issues[0]?.path).toEqual(['width'])
-    }
+    if (result.success) throw new Error('expected parse to fail')
+    expect(result.error.issues[0]?.path).toEqual(['width'])
   })
 
   it('rejects width above the maximum (4097)', () => {
     const result = processImageParamsSchema.safeParse({ ...validBase, width: 4097 })
 
     expect(result.success).toBe(false)
-    if (!result.success) {
-      expect(result.error.issues[0]?.path).toEqual(['width'])
-    }
+    if (result.success) throw new Error('expected parse to fail')
+    expect(result.error.issues[0]?.path).toEqual(['width'])
   })
 
   it('accepts width at the lower boundary (16)', () => {
@@ -44,18 +42,16 @@ describe('processImageParamsSchema — width/height bounds', () => {
     const result = processImageParamsSchema.safeParse({ ...validBase, height: 15 })
 
     expect(result.success).toBe(false)
-    if (!result.success) {
-      expect(result.error.issues[0]?.path).toEqual(['height'])
-    }
+    if (result.success) throw new Error('expected parse to fail')
+    expect(result.error.issues[0]?.path).toEqual(['height'])
   })
 
   it('rejects height above the maximum (4097)', () => {
     const result = processImageParamsSchema.safeParse({ ...validBase, height: 4097 })
 
     expect(result.success).toBe(false)
-    if (!result.success) {
-      expect(result.error.issues[0]?.path).toEqual(['height'])
-    }
+    if (result.success) throw new Error('expected parse to fail')
+    expect(result.error.issues[0]?.path).toEqual(['height'])
   })
 
   it('accepts height at the lower boundary (16)', () => {
@@ -74,9 +70,8 @@ describe('processImageParamsSchema — width/height bounds', () => {
     const result = processImageParamsSchema.safeParse({ ...validBase, width: 100.5 })
 
     expect(result.success).toBe(false)
-    if (!result.success) {
-      expect(result.error.issues[0]?.path).toEqual(['width'])
-    }
+    if (result.success) throw new Error('expected parse to fail')
+    expect(result.error.issues[0]?.path).toEqual(['width'])
   })
 })
 
@@ -91,9 +86,8 @@ describe('processImageParamsSchema — filter', () => {
     const result = processImageParamsSchema.safeParse({ ...validBase, filter: 'sepia' })
 
     expect(result.success).toBe(false)
-    if (!result.success) {
-      expect(result.error.issues[0]?.path).toEqual(['filter'])
-    }
+    if (result.success) throw new Error('expected parse to fail')
+    expect(result.error.issues[0]?.path).toEqual(['filter'])
   })
 })
 
@@ -102,36 +96,32 @@ describe('processImageParamsSchema — quality', () => {
     const result = processImageParamsSchema.safeParse(validBase)
 
     expect(result.success).toBe(true)
-    if (result.success) {
-      expect(result.data.quality).toBe(80)
-    }
+    if (!result.success) throw new Error('expected parse to succeed')
+    expect(result.data.quality).toBe(80)
   })
 
   it('accepts an explicit quality within range', () => {
     const result = processImageParamsSchema.safeParse({ ...validBase, quality: 42 })
 
     expect(result.success).toBe(true)
-    if (result.success) {
-      expect(result.data.quality).toBe(42)
-    }
+    if (!result.success) throw new Error('expected parse to succeed')
+    expect(result.data.quality).toBe(42)
   })
 
   it('rejects quality below 1', () => {
     const result = processImageParamsSchema.safeParse({ ...validBase, quality: 0 })
 
     expect(result.success).toBe(false)
-    if (!result.success) {
-      expect(result.error.issues[0]?.path).toEqual(['quality'])
-    }
+    if (result.success) throw new Error('expected parse to fail')
+    expect(result.error.issues[0]?.path).toEqual(['quality'])
   })
 
   it('rejects quality above 100', () => {
     const result = processImageParamsSchema.safeParse({ ...validBase, quality: 101 })
 
     expect(result.success).toBe(false)
-    if (!result.success) {
-      expect(result.error.issues[0]?.path).toEqual(['quality'])
-    }
+    if (result.success) throw new Error('expected parse to fail')
+    expect(result.error.issues[0]?.path).toEqual(['quality'])
   })
 })
 
@@ -141,9 +131,8 @@ describe('processImageParamsSchema — imageId', () => {
     const result = processImageParamsSchema.safeParse(withoutImageId)
 
     expect(result.success).toBe(false)
-    if (!result.success) {
-      expect(result.error.issues[0]?.path).toEqual(['imageId'])
-    }
+    if (result.success) throw new Error('expected parse to fail')
+    expect(result.error.issues[0]?.path).toEqual(['imageId'])
   })
 })
 
@@ -167,9 +156,8 @@ describe('processedImageSchema', () => {
     const result = processedImageSchema.safeParse({ ...validProcessedImage, durationMs: -1 })
 
     expect(result.success).toBe(false)
-    if (!result.success) {
-      expect(result.error.issues[0]?.path).toEqual(['durationMs'])
-    }
+    if (result.success) throw new Error('expected parse to fail')
+    expect(result.error.issues[0]?.path).toEqual(['durationMs'])
   })
 
   it('rejects params with a filter outside the enum', () => {
@@ -179,8 +167,7 @@ describe('processedImageSchema', () => {
     })
 
     expect(result.success).toBe(false)
-    if (!result.success) {
-      expect(result.error.issues[0]?.path).toEqual(['params', 'filter'])
-    }
+    if (result.success) throw new Error('expected parse to fail')
+    expect(result.error.issues[0]?.path).toEqual(['params', 'filter'])
   })
 })

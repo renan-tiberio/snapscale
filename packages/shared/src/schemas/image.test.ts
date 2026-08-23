@@ -43,9 +43,8 @@ describe('imageUploadConstraintsSchema', () => {
     })
 
     expect(result.success).toBe(false)
-    if (!result.success) {
-      expect(result.error.issues[0]?.path).toEqual(['sizeBytes'])
-    }
+    if (result.success) throw new Error('expected parse to fail')
+    expect(result.error.issues[0]?.path).toEqual(['sizeBytes'])
   })
 
   it('rejects a mime type outside the allowlist with a zod issue on mimeType', () => {
@@ -55,9 +54,8 @@ describe('imageUploadConstraintsSchema', () => {
     })
 
     expect(result.success).toBe(false)
-    if (!result.success) {
-      expect(result.error.issues[0]?.path).toEqual(['mimeType'])
-    }
+    if (result.success) throw new Error('expected parse to fail')
+    expect(result.error.issues[0]?.path).toEqual(['mimeType'])
   })
 })
 
@@ -86,17 +84,15 @@ describe('imageSchema', () => {
     const result = imageSchema.safeParse({ ...validImage, mimeType: 'image/gif' })
 
     expect(result.success).toBe(false)
-    if (!result.success) {
-      expect(result.error.issues[0]?.path).toEqual(['mimeType'])
-    }
+    if (result.success) throw new Error('expected parse to fail')
+    expect(result.error.issues[0]?.path).toEqual(['mimeType'])
   })
 
   it('rejects a size over the 10MB limit', () => {
     const result = imageSchema.safeParse({ ...validImage, sizeBytes: MAX_UPLOAD_BYTES + 1 })
 
     expect(result.success).toBe(false)
-    if (!result.success) {
-      expect(result.error.issues[0]?.path).toEqual(['sizeBytes'])
-    }
+    if (result.success) throw new Error('expected parse to fail')
+    expect(result.error.issues[0]?.path).toEqual(['sizeBytes'])
   })
 })
