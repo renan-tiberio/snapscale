@@ -27,7 +27,9 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
   const result = configSchema.safeParse(env)
 
   if (!result.success) {
-    const fields = [...new Set(result.error.issues.map((issue) => String(issue.path[0])))].join(', ')
+    const fields = [...new Set(result.error.issues.map((issue) => String(issue.path[0])))].join(
+      ', ',
+    )
     throw new Error(`Invalid environment configuration — offending field(s): ${fields}`)
   }
 

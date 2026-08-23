@@ -5,7 +5,6 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import * as albumsRepo from '@/repositories/albums.js'
 import * as imagesRepo from '@/repositories/images.js'
 import * as usersRepo from '@/repositories/users.js'
-
 import { countRows, createTestDatabase, truncateAll, type TestDatabase } from '~/test/db.js'
 
 describe('imagesRepo', () => {
@@ -50,9 +49,13 @@ describe('imagesRepo', () => {
   })
 
   it('rejects an image pointing at a missing album with foreign_key_violation 23503', async () => {
+    // drizzle wraps driver failures in DrizzleQueryError; the pg error — and
+    // with it the SQLSTATE and constraint name — rides on `cause`.
     await expect(
       imagesRepo.create(database.db, imageInput({ albumId: randomUUID() })),
-    ).rejects.toMatchObject({ code: '23503' })
+    ).rejects.toMatchObject({
+      cause: { code: '23503', constraint: 'images_album_id_albums_id_fk' },
+    })
   })
 
   it('lists only the images of the requested album', async () => {

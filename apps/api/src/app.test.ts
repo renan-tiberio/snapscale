@@ -50,11 +50,13 @@ describe('buildApp', () => {
 
   it('maps a zod validation failure to a 422 VALIDATION_ERROR envelope', async () => {
     const app = await buildApp({ logger: false })
-    app.withTypeProvider().get(
-      '/__validated',
-      { schema: { querystring: z.object({ count: z.coerce.number() }) } },
-      async (request) => request.query,
-    )
+    app
+      .withTypeProvider()
+      .get(
+        '/__validated',
+        { schema: { querystring: z.object({ count: z.coerce.number() }) } },
+        async (request) => request.query,
+      )
     await app.ready()
 
     const response = await app.inject({ method: 'GET', url: '/__validated?count=not-a-number' })

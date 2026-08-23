@@ -1,7 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import { runMigrations } from '@/db/migrate.js'
-
 import { createTestDatabase, type TestDatabase } from '~/test/db.js'
 
 /** Every table the phase-1 api schema owns — docs/03-technical-design.md §6. */

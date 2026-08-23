@@ -4,7 +4,6 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 
 import * as albumsRepo from '@/repositories/albums.js'
 import * as usersRepo from '@/repositories/users.js'
-
 import { countRows, createTestDatabase, truncateAll, type TestDatabase } from '~/test/db.js'
 
 describe('albumsRepo', () => {
@@ -35,9 +34,13 @@ describe('albumsRepo', () => {
   })
 
   it('rejects an album whose owner does not exist with foreign_key_violation 23503', async () => {
+    // drizzle wraps driver failures in DrizzleQueryError; the pg error — and
+    // with it the SQLSTATE and constraint name — rides on `cause`.
     await expect(
       albumsRepo.create(database.db, { ownerId: randomUUID(), name: 'Ghost' }),
-    ).rejects.toMatchObject({ code: '23503' })
+    ).rejects.toMatchObject({
+      cause: { code: '23503', constraint: 'albums_owner_id_users_id_fk' },
+    })
   })
 
   it('lists only the albums of the given owner', async () => {

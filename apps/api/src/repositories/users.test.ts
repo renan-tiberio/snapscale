@@ -3,7 +3,6 @@ import { randomUUID } from 'node:crypto'
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 
 import * as usersRepo from '@/repositories/users.js'
-
 import { countRows, createTestDatabase, truncateAll, type TestDatabase } from '~/test/db.js'
 
 const EMAIL = 'ada@example.com'

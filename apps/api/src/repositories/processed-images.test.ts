@@ -4,7 +4,6 @@ import * as albumsRepo from '@/repositories/albums.js'
 import * as imagesRepo from '@/repositories/images.js'
 import * as processedImagesRepo from '@/repositories/processed-images.js'
 import * as usersRepo from '@/repositories/users.js'
-
 import { countRows, createTestDatabase, truncateAll, type TestDatabase } from '~/test/db.js'
 
 const PARAMS_HASH = 'a1b2c3d4'
@@ -82,9 +81,13 @@ describe('processedImagesRepo', () => {
   it('rejects the same params hash twice for one image with unique_violation 23505', async () => {
     await processedImagesRepo.create(database.db, processedInput())
 
+    // drizzle wraps driver failures in DrizzleQueryError; the pg error — and
+    // with it the SQLSTATE and constraint name — rides on `cause`.
     await expect(processedImagesRepo.create(database.db, processedInput())).rejects.toMatchObject({
-      code: '23505',
-      constraint: 'processed_images_image_id_params_hash_unique',
+      cause: {
+        code: '23505',
+        constraint: 'processed_images_image_id_params_hash_unique',
+      },
     })
   })
 

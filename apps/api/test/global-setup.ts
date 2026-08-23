@@ -1,4 +1,5 @@
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testcontainers/postgresql'
+
 import type { GlobalSetupContext } from 'vitest/node'
 
 /**
