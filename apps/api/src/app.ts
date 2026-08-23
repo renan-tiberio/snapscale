@@ -20,6 +20,7 @@ import {
 import type { Database } from '@/db/index.js'
 import type { Mailer } from '@/services/mailer.js'
 
+import { AuthenticationError, authGuardPlugin, createAuthenticateHandler } from '@/plugins/auth-guard.js'
 import { authRoutes } from '@/routes/auth.js'
 import { healthRoutes } from '@/routes/health.js'
 
@@ -77,6 +78,16 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<App> {
   })
 
   app.setErrorHandler((error, request, reply) => {
+    // Check for AuthenticationError using property check (more reliable than instanceof)
+    if (error instanceof AuthenticationError) {
+      reply.code(401).send(fail(ERROR_CODES.UNAUTHORIZED, error.message))
+      return
+    }
+    if (error && typeof error === 'object' && (error as Record<string, unknown>).isAuthenticationError === true && error instanceof Error) {
+      reply.code(401).send(fail(ERROR_CODES.UNAUTHORIZED, error.message))
+      return
+    }
+
     if (hasZodFastifySchemaValidationErrors(error)) {
       request.log.warn({ err: error }, 'request validation failed')
       reply.code(422).send(fail(ERROR_CODES.VALIDATION_ERROR, error.message))
@@ -91,8 +102,18 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<App> {
 
   await app.register(healthRoutes)
 
-  if (options.db && options.mailer && options.jwtSecret && options.otpTtlSeconds) {
+  if (options.jwtSecret) {
     await app.register(fastifyJwt, { secret: options.jwtSecret })
+    await app.register(authGuardPlugin)
+    // Ensure authenticate is available on the app instance
+    // If the plugin didn't set it (due to proxy/scope issues), set it directly
+    const appRecord = app as unknown as Record<string, unknown>
+    if (typeof appRecord.authenticate !== 'function') {
+      appRecord.authenticate = createAuthenticateHandler(app)
+    }
+  }
+
+  if (options.db && options.mailer && options.jwtSecret && options.otpTtlSeconds) {
     await app.register(
       authRoutes({ db: options.db, mailer: options.mailer, otpTtlSeconds: options.otpTtlSeconds }),
     )
