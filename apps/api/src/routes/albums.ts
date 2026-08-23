@@ -1,4 +1,12 @@
-import { ERROR_CODES, albumSchema, createAlbumSchema, fail, ok, updateAlbumSchema } from '@snapscale/shared'
+import {
+  ERROR_CODES,
+  albumSchema,
+  createAlbumSchema,
+  fail,
+  listAlbumsQuerySchema,
+  ok,
+  updateAlbumSchema,
+} from '@snapscale/shared'
 import { z } from 'zod'
 
 import type { App } from '@/app.js'
@@ -22,9 +30,21 @@ const albumResponseSchema = z.object({
   data: albumSchema.optional(),
 })
 
+/**
+ * `meta` is declared here on purpose: the zod serializer strips whatever the
+ * response schema does not mention, so the pagination block the handler
+ * builds would silently vanish from the wire without this.
+ */
 const albumListResponseSchema = z.object({
   success: z.boolean(),
   data: z.array(albumSchema).optional(),
+  meta: z
+    .object({
+      total: z.number().int().nonnegative(),
+      page: z.number().int().positive(),
+      limit: z.number().int().positive(),
+    })
+    .optional(),
 })
 
 const emptyResponseSchema = z.object({
@@ -47,12 +67,20 @@ export function albumRoutes(deps: AlbumRoutesDeps): FastifyPluginAsyncZod {
       {
         preHandler: deps.authenticate,
         schema: {
-          description: "Lists the authenticated user's albums.",
+          description: "Lists the authenticated user's albums, newest first.",
           tags: ['albums'],
-          response: { 200: albumListResponseSchema, 401: errorEnvelopeSchema },
+          querystring: listAlbumsQuerySchema,
+          response: {
+            200: albumListResponseSchema,
+            401: errorEnvelopeSchema,
+            422: errorEnvelopeSchema,
+          },
         },
       },
-      async (request) => ok(await albumsService.listAlbums(deps.db, request.user.id)),
+      async (request) => {
+        const page = await albumsService.listAlbums(deps.db, request.user.id, request.query)
+        return ok(page.albums, page.meta)
+      },
     )
 
     fastify.post(

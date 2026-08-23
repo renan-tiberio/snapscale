@@ -1,4 +1,4 @@
-import { and, desc, eq } from 'drizzle-orm'
+import { and, count, desc, eq } from 'drizzle-orm'
 
 import type { Database } from '@/db/index.js'
 
@@ -31,8 +31,40 @@ export async function create(db: Database, input: CreateAlbumInput): Promise<Alb
   return requireRow(inserted, 'albumsRepo.create')
 }
 
-export async function listByOwner(db: Database, ownerId: string): Promise<Album[]> {
-  return db.select().from(albums).where(eq(albums.ownerId, ownerId)).orderBy(desc(albums.createdAt))
+export interface AlbumPageQuery {
+  readonly limit: number
+  readonly offset: number
+}
+
+export interface AlbumPage {
+  readonly rows: Album[]
+  /** Albums this owner has in total — not the length of `rows` (docs/03 §4 `meta.total`). */
+  readonly total: number
+}
+
+/**
+ * One page of the owner's albums, newest first, plus the full count so the
+ * response can carry `meta { total, page, limit }`. Two statements rather
+ * than a `count(*) over ()` window column: the window value only rides on
+ * rows that came back, so a page past the end would report a total of zero.
+ */
+export async function listPageByOwner(
+  db: Database,
+  ownerId: string,
+  page: AlbumPageQuery,
+): Promise<AlbumPage> {
+  const [rows, counted] = await Promise.all([
+    db
+      .select()
+      .from(albums)
+      .where(eq(albums.ownerId, ownerId))
+      .orderBy(desc(albums.createdAt))
+      .limit(page.limit)
+      .offset(page.offset),
+    db.select({ total: count() }).from(albums).where(eq(albums.ownerId, ownerId)),
+  ])
+
+  return { rows, total: counted[0]?.total ?? 0 }
 }
 
 /**

@@ -22,9 +22,31 @@ function toApiAlbum(row: AlbumRow): ApiAlbum {
   }
 }
 
-export async function listAlbums(db: Database, ownerId: string): Promise<ApiAlbum[]> {
-  const rows = await albumsRepo.listByOwner(db, ownerId)
-  return rows.map(toApiAlbum)
+export interface AlbumPagination {
+  readonly page: number
+  readonly limit: number
+}
+
+export interface AlbumListPage {
+  readonly albums: ApiAlbum[]
+  /** Ready to hand straight to `ok(data, meta)` — docs/03 §4. */
+  readonly meta: { total: number; page: number; limit: number }
+}
+
+export async function listAlbums(
+  db: Database,
+  ownerId: string,
+  pagination: AlbumPagination,
+): Promise<AlbumListPage> {
+  const page = await albumsRepo.listPageByOwner(db, ownerId, {
+    limit: pagination.limit,
+    offset: (pagination.page - 1) * pagination.limit,
+  })
+
+  return {
+    albums: page.rows.map(toApiAlbum),
+    meta: { total: page.total, page: pagination.page, limit: pagination.limit },
+  }
 }
 
 export interface CreateAlbumServiceInput {
