@@ -1,0 +1,42 @@
+{
+  "name": "@snapscale/otel",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "lint": "eslint .",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage"
+  },
+  "dependencies": {
+    "@opentelemetry/api": "1.9.1",
+    "@opentelemetry/auto-instrumentations-node": "0.79.0",
+    "@opentelemetry/exporter-trace-otlp-http": "0.221.0",
+    "@opentelemetry/instrumentation-fastify": "0.57.0",
+    "@opentelemetry/resources": "2.10.0",
+    "@opentelemetry/sdk-node": "0.221.0",
+    "@opentelemetry/sdk-trace-base": "2.10.0",
+    "@opentelemetry/semantic-conventions": "1.43.0",
+    "zod": "3.25.76"
+  },
+  "devDependencies": {
+    "@snapscale/eslint-config": "workspace:*",
+    "@snapscale/tsconfig": "workspace:*",
+    "@types/node": "22.10.2",
+    "@vitest/coverage-v8": "3.2.7",
+    "eslint": "9.39.5",
+    "typescript": "5.9.3",
+    "vitest": "3.2.7"
+  }
+}
