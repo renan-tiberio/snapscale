@@ -46,6 +46,12 @@ RUN printf 'server {\n\
   }\n\
 }\n' > /etc/nginx/conf.d/default.conf
 EXPOSE 5173
+# FIX-E: busybox `wget` resolves `localhost` to `::1` first (`/etc/hosts`
+# lists it before `127.0.0.1`); nginx here only `listen`s on the IPv4
+# wildcard, so that first resolution attempt always gets "Connection
+# refused" and the healthcheck never passes even though the app serves 200s
+# correctly. Target 127.0.0.1 explicitly instead of relying on `localhost`'s
+# resolution order.
 HEALTHCHECK --interval=10s --timeout=3s --start-period=10s --retries=5 \
-  CMD ["wget", "-q", "-O", "-", "http://localhost:5173/"]
+  CMD ["wget", "-q", "-O", "-", "http://127.0.0.1:5173/"]
 CMD ["nginx", "-g", "daemon off;"]
