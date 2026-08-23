@@ -4,8 +4,10 @@ import { describe, expect, it } from 'vitest'
 
 import { AuthProvider, useAuthContext } from './AuthContext'
 
-import { AUTH_STORAGE_KEY, LOGOUT_EVENT } from '@/services/http'
+import { getItem } from '@/services/storage'
 import { TEST_TOKEN, testUser } from '@/test/msw/handlers'
+import { writeRawStorageItem } from '@/test/utils'
+import { emitAppEvent } from '@/utils/events'
 
 
 function SessionProbe() {
@@ -63,7 +65,7 @@ describe('AuthContext', () => {
     await user.click(screen.getByRole('button', { name: 'sign out' }))
 
     expect(screen.getByText('signed out')).toBeInTheDocument()
-    expect(window.localStorage.getItem(AUTH_STORAGE_KEY)).toBeNull()
+    expect(getItem('session')).toBeNull()
   })
 
   it('signs the user out when the http layer broadcasts a logout', async () => {
@@ -72,14 +74,14 @@ describe('AuthContext', () => {
     await user.click(screen.getByRole('button', { name: 'sign in' }))
 
     act(() => {
-      window.dispatchEvent(new Event(LOGOUT_EVENT))
+      emitAppEvent('auth/logout', undefined)
     })
 
     expect(await screen.findByText('signed out')).toBeInTheDocument()
   })
 
   it('starts signed out when the persisted session is corrupted', () => {
-    window.localStorage.setItem(AUTH_STORAGE_KEY, 'not-json')
+    writeRawStorageItem('snapscale.session', 'not-json')
 
     renderProbe()
 

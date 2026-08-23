@@ -1,15 +1,10 @@
-import { createContext, useContext, useEffect, useState } from 'react'
-
+import { createContext, useContext, useState } from 'react'
 
 import type { SessionResponse, User } from '@snapscale/shared'
 import type { ReactNode } from 'react'
 
-import {
-  clearStoredSession,
-  LOGOUT_EVENT,
-  readStoredSession,
-  storeSession,
-} from '@/services/http'
+import { useAppEvent } from '@/hooks/useAppEvent'
+import { clearStoredSession, readStoredSession, storeSession } from '@/services/http'
 
 export interface AuthContextValue {
   user: User | null
@@ -25,17 +20,9 @@ const AuthContext = createContext<AuthContextValue | null>(null)
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<SessionResponse | null>(readStoredSession)
 
-  useEffect(() => {
-    function handleLogout() {
-      setSession(null)
-    }
-
-    window.addEventListener(LOGOUT_EVENT, handleLogout)
-
-    return () => {
-      window.removeEventListener(LOGOUT_EVENT, handleLogout)
-    }
-  }, [])
+  useAppEvent('auth/logout', () => {
+    setSession(null)
+  })
 
   function login(next: SessionResponse) {
     storeSession(next)

@@ -18,7 +18,9 @@ describe('events', () => {
     emitAppEvent('auth/logout', undefined)
     unsubscribe()
 
-    expect(handler).toHaveBeenCalledWith(undefined)
+    // A `CustomEventInit.detail` of `undefined` is read back as `null` per the
+    // DOM spec — this is real browser behavior, not a gap in our wrapper.
+    expect(handler).toHaveBeenCalledWith(null)
   })
 
   it('delivers a typed, non-trivial payload to the handler', () => {

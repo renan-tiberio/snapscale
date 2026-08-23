@@ -1,3 +1,5 @@
+import { useEffect, useLayoutEffect, useRef } from 'react'
+
 /** Subscribes to a window event for the lifetime of the component. */
 export function useEventListener<K extends keyof WindowEventMap>(
   target: Window,
@@ -10,11 +12,33 @@ export function useEventListener<E extends HTMLElement, K extends keyof HTMLElem
   type: K,
   handler: (event: HTMLElementEventMap[K]) => void,
 ): void
-// STUB — red phase. Real implementation lands with the green commit.
 export function useEventListener(
-  _target: EventTarget | null,
-  _type: string,
-  _handler: (event: Event) => void,
+  target: EventTarget | null,
+  type: string,
+  handler: (event: Event) => void,
 ): void {
-  // not implemented yet
+  // Latest-handler ref: the effect subscribes once per (target, type) pair and
+  // never re-subscribes just because an inline handler identity changed.
+  // Synced in an effect (not during render) — React Compiler forbids ref
+  // writes in the render body.
+  const handlerRef = useRef(handler)
+  useLayoutEffect(() => {
+    handlerRef.current = handler
+  }, [handler])
+
+  useEffect(() => {
+    if (target === null) {
+      return
+    }
+
+    function listener(event: Event): void {
+      handlerRef.current(event)
+    }
+
+    target.addEventListener(type, listener)
+
+    return () => {
+      target.removeEventListener(type, listener)
+    }
+  }, [target, type])
 }

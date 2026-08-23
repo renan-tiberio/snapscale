@@ -7,6 +7,8 @@ import { afterAll, afterEach, beforeAll } from 'vitest'
 import { resetApiState } from './msw/handlers'
 import { server } from './msw/server'
 
+import { clear as clearStorage } from '@/services/storage'
+
 // jsdom ships its own `FormData`/`File`/`Blob`, but `fetch`/`Request` in this
 // environment come from Node. Handing a jsdom FormData to Node's fetch does not
 // throw — it silently serializes to the string "[object FormData]", so a
@@ -28,7 +30,7 @@ beforeAll(() => {
 afterEach(() => {
   server.resetHandlers()
   resetApiState()
-  window.localStorage.clear()
+  clearStorage()
 })
 
 afterAll(() => {

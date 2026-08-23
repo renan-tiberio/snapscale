@@ -2,17 +2,17 @@ import { ERROR_CODES, fail, ok } from '@snapscale/shared'
 import { http as mswHttp, HttpResponse } from 'msw'
 import { describe, expect, it, vi } from 'vitest'
 
-import { ApiError, AUTH_STORAGE_KEY, http, LOGOUT_EVENT, readStoredSession } from './http'
+import { ApiError, http, readStoredSession } from './http'
+import { setItem } from './storage'
 
 import { API_BASE, fixtures, TEST_TOKEN, testUser } from '@/test/msw/handlers'
 import { server } from '@/test/msw/server'
+import { writeRawStorageItem } from '@/test/utils'
+import { subscribeAppEvent } from '@/utils/events'
 
 
 function seedStoredSession() {
-  window.localStorage.setItem(
-    AUTH_STORAGE_KEY,
-    JSON.stringify({ token: TEST_TOKEN, user: testUser }),
-  )
+  setItem('session', { token: TEST_TOKEN, user: testUser })
 }
 
 describe('http', () => {
@@ -86,7 +86,7 @@ describe('http', () => {
   it('clears the stored session and broadcasts a logout on 401', async () => {
     seedStoredSession()
     const onLogout = vi.fn()
-    window.addEventListener(LOGOUT_EVENT, onLogout)
+    const unsubscribe = subscribeAppEvent('auth/logout', onLogout)
     server.use(
       mswHttp.get(`${API_BASE}/albums`, () =>
         HttpResponse.json(fail(ERROR_CODES.UNAUTHORIZED, 'Session expired'), { status: 401 }),
@@ -96,7 +96,7 @@ describe('http', () => {
     await expect(http.get('/albums')).rejects.toMatchObject({
       code: ERROR_CODES.UNAUTHORIZED,
     })
-    window.removeEventListener(LOGOUT_EVENT, onLogout)
+    unsubscribe()
 
     expect(readStoredSession()).toBeNull()
     expect(onLogout).toHaveBeenCalledTimes(1)
@@ -109,13 +109,13 @@ describe('http', () => {
   })
 
   it('treats a corrupted stored session as no session', () => {
-    window.localStorage.setItem(AUTH_STORAGE_KEY, '{ not json')
+    writeRawStorageItem('snapscale.session', '{ not json')
 
     expect(readStoredSession()).toBeNull()
   })
 
   it('treats a stored session that does not match the contract as no session', () => {
-    window.localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify({ token: '', user: null }))
+    writeRawStorageItem('snapscale.session', JSON.stringify({ token: '', user: null }))
 
     expect(readStoredSession()).toBeNull()
   })

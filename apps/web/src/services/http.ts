@@ -1,17 +1,12 @@
-import { ERROR_CODES, sessionResponseSchema } from '@snapscale/shared'
+import { ERROR_CODES } from '@snapscale/shared'
 import axios from 'axios'
-
 
 import type { ApiResponse, SessionResponse } from '@snapscale/shared'
 import type { AxiosError, AxiosResponse } from 'axios'
 
+import { getItem, removeItem, setItem } from '@/services/storage'
 import { API_BASE_URL } from '@/utils/env'
-
-/** The one localStorage key holding the session (`docs/03-technical-design.md` §5). */
-export const AUTH_STORAGE_KEY = 'snapscale.session'
-
-/** Window event fired when the API rejects the token — the auth context listens for it. */
-export const LOGOUT_EVENT = 'snapscale:logout'
+import { emitAppEvent } from '@/utils/events'
 
 /** Normalized API failure: always carries the machine-readable contract code. */
 export class ApiError extends Error {
@@ -26,28 +21,17 @@ export class ApiError extends Error {
   }
 }
 
-/** Reads the persisted session, validating it against the shared contract. */
+/** Reads the persisted session (`services/storage` schema key `session`). */
 export function readStoredSession(): SessionResponse | null {
-  const raw = window.localStorage.getItem(AUTH_STORAGE_KEY)
-
-  if (raw === null) {
-    return null
-  }
-
-  try {
-    const parsed = sessionResponseSchema.safeParse(JSON.parse(raw))
-    return parsed.success ? parsed.data : null
-  } catch {
-    return null
-  }
+  return getItem('session')
 }
 
 export function storeSession(session: SessionResponse): void {
-  window.localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(session))
+  setItem('session', session)
 }
 
 export function clearStoredSession(): void {
-  window.localStorage.removeItem(AUTH_STORAGE_KEY)
+  removeItem('session')
 }
 
 function toApiError(payload: unknown, status: number): ApiError {
@@ -99,7 +83,7 @@ http.interceptors.response.use(
 
     if (status === 401) {
       clearStoredSession()
-      window.dispatchEvent(new Event(LOGOUT_EVENT))
+      emitAppEvent('auth/logout', undefined)
     }
 
     throw toApiError(error.response?.data, status)

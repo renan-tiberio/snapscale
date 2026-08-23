@@ -2,9 +2,9 @@ import { describe, expect, it } from 'vitest'
 
 import { clear, getItem, removeItem, setItem } from './storage'
 
-import { TEST_TOKEN, testUser } from '@/test/msw/handlers'
-
 import type { SessionResponse } from '@snapscale/shared'
+
+import { TEST_TOKEN, testUser } from '@/test/msw/handlers'
 
 
 const session: SessionResponse = { token: TEST_TOKEN, user: testUser }

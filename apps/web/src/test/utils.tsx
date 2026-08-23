@@ -9,13 +9,24 @@ import type { ReactNode } from 'react'
 
 import { AuthProvider } from '@/context/AuthContext'
 import { routes } from '@/router'
-import { AUTH_STORAGE_KEY } from '@/services/http'
+import { setItem } from '@/services/storage'
 
 
 
 /** Writes a valid session to localStorage so a render starts authenticated. */
 export function seedSession(session: SessionResponse = { token: TEST_TOKEN, user: testUser }): void {
-  window.localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(session))
+  setItem('session', session)
+}
+
+/**
+ * Writes a raw, unvalidated string directly to the browser's storage engine —
+ * bypassing the typed `services/storage` wrapper — to simulate legacy or
+ * corrupted data for guard-clause tests. This is the one sanctioned escape
+ * hatch outside `services/storage`; it exists to construct exactly the kind
+ * of input that wrapper is meant to guard against.
+ */
+export function writeRawStorageItem(key: string, value: string): void {
+  Storage.prototype.setItem.call(window.localStorage, key, value)
 }
 
 /** Query client for tests: no retries (errors surface immediately), no cache reuse. */
