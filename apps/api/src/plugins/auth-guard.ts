@@ -126,7 +126,7 @@ async function verifyAndAttachUser(
  * the real detail goes to the server log via `request.log.warn`, never the
  * response body.
  */
-const GENERIC_UNAUTHORIZED_MESSAGE = 'Invalid or expired token'
+export const UNAUTHORIZED_MESSAGE = 'Invalid or expired token'
 
 function sendUnauthorized(request: FastifyRequest, reply: FastifyReply, error: unknown): void {
   if (error instanceof AuthenticationError) {
@@ -135,7 +135,7 @@ function sendUnauthorized(request: FastifyRequest, reply: FastifyReply, error: u
   }
   const detail = error instanceof Error ? error.message : 'unknown error'
   request.log.warn({ err: error }, `authentication failed: ${detail}`)
-  reply.code(401).send(fail(ERROR_CODES.UNAUTHORIZED, GENERIC_UNAUTHORIZED_MESSAGE))
+  reply.code(401).send(fail(ERROR_CODES.UNAUTHORIZED, UNAUTHORIZED_MESSAGE))
 }
 
 /**
@@ -183,14 +183,4 @@ export function createAuthenticateAllowingQueryTokenHandler(fastify: FastifyInst
       sendUnauthorized(request, reply, error)
     }
   }
-}
-
-/**
- * Auth-guard plugin that provides JWT verification via preHandler.
- * Registers both authenticate preHandlers on the app instance.
- */
-export async function authGuardPlugin(fastify: FastifyInstance): Promise<void> {
-  const appRecord = fastify as unknown as Record<string, unknown>
-  appRecord.authenticate = createAuthenticateHandler(fastify)
-  appRecord.authenticateAllowingQueryToken = createAuthenticateAllowingQueryTokenHandler(fastify)
 }

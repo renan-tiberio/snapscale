@@ -33,21 +33,60 @@ const errorEnvelopeSchema = z.object({
 const JWT_EXPIRY = '1h'
 
 /**
+ * Per-email cap on `/auth/otp/verify` (docs/03 §5.3). The per-*code* cap in
+ * `services/otp.ts` is 5 attempts, but it resets with every freshly requested
+ * code — an attacker willing to re-request could guess an address forever.
+ * This one is keyed on the address itself, so re-requesting buys nothing.
+ * Deliberately above the 6 requests a legitimate "5 wrong guesses, then the
+ * right one" flow costs.
+ */
+const VERIFY_MAX_ATTEMPTS_PER_EMAIL = 10
+const VERIFY_EMAIL_WINDOW = '10 minutes'
+
+const RATE_LIMITED_MESSAGE = 'Too many requests, please try again later'
+
+/** The `email` of an already-validated `verifyOtpSchema` body, lowercased for a stable key. */
+function verifyEmailKey(request: { readonly body?: unknown }): string {
+  const email = (request.body as { email?: unknown } | undefined)?.email
+  return `email:${typeof email === 'string' ? email.toLowerCase() : 'unknown'}`
+}
+
+/**
  * OTP auth surface — `docs/03-technical-design.md` §4/§5. A factory (not a
  * bare plugin) because both routes need the db/mailer/ttl that only the app
  * composition root (`app.ts`) owns.
  */
 export function authRoutes(deps: AuthRoutesDeps): FastifyPluginAsyncZod {
   return async (fastify) => {
-    // Per-IP throttle only — the 60s-per-email resend cooldown is the
-    // service-level rule (services/otp.ts, §5). The limit here stays
-    // generous so it never masks that rule for a single legitimate caller
+    // Per-IP throttle for every auth route — the 60s-per-email resend
+    // cooldown is the service-level rule (services/otp.ts, §5) and the
+    // per-email verify cap is the limiter below. The limit here stays
+    // generous so it never masks those rules for a single legitimate caller
     // making several requests/attempts in a row.
     await fastify.register(fastifyRateLimit, {
       max: 100,
       timeWindow: '1 minute',
-      errorResponseBuilder: () =>
-        fail(ERROR_CODES.RATE_LIMITED, 'Too many requests, please try again later'),
+      // `@fastify/rate-limit` *throws* whatever this returns, so it has to be
+      // an `Error` carrying `statusCode`: the app error handler is what turns
+      // it into the envelope. Returning a bare `fail()` object here (no
+      // `statusCode`, not an `Error`) landed in the handler's 500 fallback,
+      // so the per-IP limiter answered 500 INTERNAL instead of 429.
+      errorResponseBuilder: (_request, context) => {
+        const error = new Error(RATE_LIMITED_MESSAGE) as Error & { statusCode: number }
+        error.statusCode = context.statusCode
+        return error
+      },
+    })
+
+    // `createRateLimit` (not `fastify.rateLimit`) on purpose: the hook form
+    // short-circuits when *any* limiter already ran on the request, and the
+    // per-IP one above always has. This form is a plain counter call, so both
+    // keys are enforced — and running it as a `preHandler` is what makes
+    // `request.body.email` available (and already schema-validated) to key on.
+    const verifyEmailLimiter = fastify.createRateLimit({
+      max: VERIFY_MAX_ATTEMPTS_PER_EMAIL,
+      timeWindow: VERIFY_EMAIL_WINDOW,
+      keyGenerator: verifyEmailKey,
     })
 
     fastify.post(
@@ -82,11 +121,23 @@ export function authRoutes(deps: AuthRoutesDeps): FastifyPluginAsyncZod {
     fastify.post(
       '/auth/otp/verify',
       {
+        // `isAllowed` is only ever `true` for an allow-list hit; for a real
+        // counted request the verdict is `isExceeded`.
+        preHandler: async (request, reply) => {
+          const attempt = await verifyEmailLimiter(request)
+          if (!attempt.isAllowed && attempt.isExceeded) {
+            await reply.code(429).send(fail(ERROR_CODES.RATE_LIMITED, RATE_LIMITED_MESSAGE))
+          }
+        },
         schema: {
           description: 'Exchanges a 6-digit code for a session.',
           tags: ['auth'],
           body: verifyOtpSchema,
-          response: { 200: verifyOtpResponseSchema, 401: errorEnvelopeSchema },
+          response: {
+            200: verifyOtpResponseSchema,
+            401: errorEnvelopeSchema,
+            429: errorEnvelopeSchema,
+          },
         },
       },
       async (request, reply) => {
