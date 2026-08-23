@@ -110,3 +110,76 @@ http.interceptors.response.use(
     throw toApiError(error.response?.data, status)
   },
 )
+
+/**
+ * A hung request (dead network, a server that never answers) must not stall
+ * forever — axios's own default is `0`, i.e. never time out. A stuck
+ * `/auth/file-token` call under that default would never settle, and the
+ * refresh loop in `hooks/queries/useFileToken.ts` would stop for good. 15s
+ * is generous for every route this instance serves.
+ */
+export const REQUEST_TIMEOUT_MS = 15_000
+
+/**
+ * Deliberately NOT axios's own `timeout` (or a `signal`) option: both route
+ * through the fetch adapter's `composeSignals` helper, which always builds a
+ * fresh `new AbortController()` off of whatever `AbortController` happens to
+ * be the ambient global. Under `environment: 'jsdom'` that global is jsdom's
+ * AbortController, not Node's — and Node's own `fetch` (the adapter this
+ * instance prefers, see above) rejects any signal that isn't an instance of
+ * *its* AbortSignal, so every mocked request fails outright, not just slow
+ * ones. Real browsers only ever have one AbortController, so this is a test
+ * -environment-only trap. Timing out the returned promise ourselves — without
+ * ever touching AbortController — sidesteps it while still giving every
+ * caller (`services/*.ts`) a bounded wait.
+ */
+function withTimeout<T>(promise: Promise<T>): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    let settled = false
+    const timeoutId = setTimeout(() => {
+      if (settled) {
+        return
+      }
+      settled = true
+      reject(new ApiError(ERROR_CODES.INTERNAL, GENERIC_ERROR_MESSAGE, 0))
+    }, REQUEST_TIMEOUT_MS)
+
+    promise.then(
+      (value) => {
+        if (settled) {
+          return
+        }
+        settled = true
+        clearTimeout(timeoutId)
+        resolve(value)
+      },
+      (error: unknown) => {
+        if (settled) {
+          return
+        }
+        settled = true
+        clearTimeout(timeoutId)
+        reject(error)
+      },
+    )
+  })
+}
+
+// Every verb `services/*.ts` calls (`http.get/.post/.patch/.delete`) is
+// rewrapped in place, after the interceptors above are wired, so callers
+// keep using `http.get(...)` exactly as before — only now it's bounded by
+// `REQUEST_TIMEOUT_MS` regardless of which route it calls.
+type HttpGet = typeof http.get
+type HttpPost = typeof http.post
+type HttpPatch = typeof http.patch
+type HttpDelete = typeof http.delete
+
+const rawGet: HttpGet = http.get.bind(http)
+const rawPost: HttpPost = http.post.bind(http)
+const rawPatch: HttpPatch = http.patch.bind(http)
+const rawDelete: HttpDelete = http.delete.bind(http)
+
+http.get = ((url, config) => withTimeout(rawGet(url, config))) as HttpGet
+http.post = ((url, data, config) => withTimeout(rawPost(url, data, config))) as HttpPost
+http.patch = ((url, data, config) => withTimeout(rawPatch(url, data, config))) as HttpPatch
+http.delete = ((url, config) => withTimeout(rawDelete(url, config))) as HttpDelete

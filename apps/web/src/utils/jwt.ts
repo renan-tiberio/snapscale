@@ -16,13 +16,14 @@ function base64UrlDecode(segment: string): string {
 /** The `exp` claim in epoch milliseconds, or `null` if `token` isn't a decodable JWT. */
 export function decodeJwtExpiryMs(token: string): number | null {
   const parts = token.split('.')
+  const payloadSegment = parts[1]
 
-  if (parts.length !== 3) {
+  if (parts.length !== 3 || payloadSegment === undefined) {
     return null
   }
 
   try {
-    const payload = JSON.parse(base64UrlDecode(parts[1])) as { exp?: unknown }
+    const payload = JSON.parse(base64UrlDecode(payloadSegment)) as { exp?: unknown }
 
     return typeof payload.exp === 'number' ? payload.exp * 1000 : null
   } catch {

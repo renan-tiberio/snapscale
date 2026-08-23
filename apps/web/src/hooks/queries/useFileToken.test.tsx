@@ -5,9 +5,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { useFileToken } from './useFileToken'
 
+import { createFileTokenWithTtlMs } from '@/test/jwt'
 import { API_BASE, TEST_FILE_TOKEN } from '@/test/msw/handlers'
 import { server } from '@/test/msw/server'
-import { createFileTokenWithTtlMs } from '@/test/jwt'
 import { createHookWrapper, seedSession } from '@/test/utils'
 
 function renderUseFileToken() {

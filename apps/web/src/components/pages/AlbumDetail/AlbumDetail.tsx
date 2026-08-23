@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router'
 
 import type { ImageProcessOptions } from '@snapscale/shared'
@@ -17,7 +17,7 @@ export function AlbumDetail() {
   const { albumId = '' } = useParams()
   // The short-lived `scope: 'file'` token, never the session token — see
   // `hooks/queries/useFileToken.ts` and `utils/imageUrls.ts`.
-  const { fileToken } = useFileToken()
+  const { fileToken, refresh: refreshFileToken } = useFileToken()
   const { albums } = useAlbums()
   const { images, isLoading, error, uploadImage, isUploading, uploadError } = useImages(albumId)
   const { processImage, processedImage, isProcessing, processError, reset } = useProcessImage()
@@ -27,6 +27,26 @@ export function AlbumDetail() {
   const selectedImage = images.find((image) => image.id === selectedImageId) ?? null
   const alertMessage = error?.message ?? uploadError?.message ?? null
   const isEmpty = !isLoading && error === null && images.length === 0
+
+  // Rebuilt only when `images` or `fileToken` actually change — not on every
+  // unrelated re-render (upload progress, selection, …) — so the `<img
+  // src>` stays byte-for-byte stable and the browser doesn't treat it as a
+  // new resource to re-download between token rotations.
+  const imageSrcById = useMemo(() => {
+    if (fileToken === null) {
+      return new Map<string, string>()
+    }
+
+    return new Map(images.map((image) => [image.id, imageFileUrl(image.id, fileToken)]))
+  }, [images, fileToken])
+
+  const resultUrl = useMemo(() => {
+    if (processedImage === null || fileToken === null) {
+      return null
+    }
+
+    return processedImageUrl(processedImage.storagePath, fileToken)
+  }, [processedImage, fileToken])
 
   function handleSelect(imageId: string) {
     reset()
@@ -73,9 +93,10 @@ export function AlbumDetail() {
           <li key={image.id}>
             <ImageCard
               image={image}
-              src={imageFileUrl(image.id, fileToken)}
+              src={imageSrcById.get(image.id) ?? null}
               onProcess={handleSelect}
               isSelected={image.id === selectedImageId}
+              onImageError={refreshFileToken}
             />
           </li>
         ))}
@@ -88,7 +109,8 @@ export function AlbumDetail() {
           onClose={handleClose}
           isProcessing={isProcessing}
           errorMessage={processError?.message ?? null}
-          resultUrl={processedImage === null ? null : processedImageUrl(processedImage.storagePath, fileToken)}
+          resultUrl={resultUrl}
+          onImageError={refreshFileToken}
         />
       )}
     </main>

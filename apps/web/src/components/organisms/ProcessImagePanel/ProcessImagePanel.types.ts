@@ -9,4 +9,10 @@ export interface ProcessImagePanelProps {
   errorMessage?: string | null
   /** Absolute URL of the processed result, once the API returned one. */
   resultUrl?: string | null
+  /**
+   * Called when the result `<img>` fails to load (e.g. a 401 from an
+   * expired file token) and again if the user retries — the caller should
+   * refresh the file token so the next attempt has a live one.
+   */
+  onImageError?: () => void
 }

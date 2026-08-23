@@ -2,7 +2,7 @@ import { ERROR_CODES, fail, ok } from '@snapscale/shared'
 import { http as mswHttp, HttpResponse } from 'msw'
 import { describe, expect, it, vi } from 'vitest'
 
-import { ApiError, http, readStoredSession } from './http'
+import { ApiError, http, readStoredSession, REQUEST_TIMEOUT_MS } from './http'
 import { setItem } from './storage'
 
 import { API_BASE, fixtures, TEST_TOKEN, testUser } from '@/test/msw/handlers'
@@ -149,19 +149,20 @@ describe('http', () => {
   })
 
   it('ships with a bounded default timeout instead of axios\'s "never" default', () => {
-    expect(http.defaults.timeout).toBeGreaterThan(0)
-    expect(http.defaults.timeout).toBeLessThanOrEqual(30_000)
+    expect(REQUEST_TIMEOUT_MS).toBeGreaterThan(0)
+    expect(REQUEST_TIMEOUT_MS).toBeLessThanOrEqual(30_000)
   })
 
   it('aborts a request that never gets a response instead of hanging forever', async () => {
-    server.use(mswHttp.get(`${API_BASE}/albums`, () => new Promise<never>(() => {})))
-    const originalTimeout = http.defaults.timeout
-    http.defaults.timeout = 50
+    server.use(mswHttp.get(`${API_BASE}/albums`, () => new Promise<never>(() => undefined)))
 
+    vi.useFakeTimers({ shouldAdvanceTime: true })
     try {
-      await expect(http.get('/albums')).rejects.toMatchObject({ code: ERROR_CODES.INTERNAL })
+      const pending = expect(http.get('/albums')).rejects.toMatchObject({ code: ERROR_CODES.INTERNAL })
+      await vi.advanceTimersByTimeAsync(REQUEST_TIMEOUT_MS)
+      await pending
     } finally {
-      http.defaults.timeout = originalTimeout
+      vi.useRealTimers()
     }
   })
 })

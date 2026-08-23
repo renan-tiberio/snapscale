@@ -4,7 +4,7 @@ import { useId, useState } from 'react'
 
 import type { ProcessImagePanelProps } from './ProcessImagePanel.types'
 import type { ImageFilter } from '@snapscale/shared'
-import type { FormEvent } from 'react'
+import type { FormEvent, ReactNode } from 'react'
 
 import { Button } from '@/components/atoms/Button'
 import { DEFAULT_PROCESS_OPTIONS, findSizePreset, SIZE_PRESETS } from '@/utils/processPresets'
@@ -20,6 +20,7 @@ export function ProcessImagePanel({
   isProcessing = false,
   errorMessage = null,
   resultUrl = null,
+  onImageError,
 }: ProcessImagePanelProps) {
   const presetId = useId()
   const widthId = useId()
@@ -31,6 +32,11 @@ export function ProcessImagePanel({
   const [height, setHeight] = useState(String(DEFAULT_PROCESS_OPTIONS.height))
   const [filter, setFilter] = useState<ImageFilter>(DEFAULT_PROCESS_OPTIONS.filter)
   const [quality, setQuality] = useState(String(DEFAULT_PROCESS_OPTIONS.quality))
+  // Tracks the `resultUrl` value that last failed, not just a boolean —
+  // once a fresh token produces a different `resultUrl`, this naturally
+  // stops matching and the error state clears without an effect.
+  const [erroredResultUrl, setErroredResultUrl] = useState<string | null>(null)
+  const hasResultError = resultUrl !== null && erroredResultUrl === resultUrl
 
   const selectedPreset = findSizePreset(Number(width), Number(height))
 
@@ -43,6 +49,16 @@ export function ProcessImagePanel({
 
     setWidth(String(preset.width))
     setHeight(String(preset.height))
+  }
+
+  function handleResultError() {
+    setErroredResultUrl(resultUrl)
+    onImageError?.()
+  }
+
+  function handleResultRetry() {
+    setErroredResultUrl(null)
+    onImageError?.()
   }
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -58,6 +74,29 @@ export function ProcessImagePanel({
       filter,
       quality: Number(quality),
     })
+  }
+
+  let resultContent: ReactNode = null
+
+  if (resultUrl !== null) {
+    resultContent = hasResultError ? (
+      <div
+        role="alert"
+        className="flex flex-col items-center gap-2 rounded-md border border-slate-200 p-4 text-sm text-slate-600"
+      >
+        <span>Processed image failed to load</span>
+        <Button variant="secondary" onClick={handleResultRetry}>
+          Retry
+        </Button>
+      </div>
+    ) : (
+      <img
+        src={resultUrl}
+        alt={`Processed ${imageName}`}
+        onError={handleResultError}
+        className="w-full rounded-md border border-slate-200"
+      />
+    )
   }
 
   return (
@@ -165,13 +204,7 @@ export function ProcessImagePanel({
         </p>
       )}
 
-      {resultUrl === null ? null : (
-        <img
-          src={resultUrl}
-          alt={`Processed ${imageName}`}
-          className="w-full rounded-md border border-slate-200"
-        />
-      )}
+      {resultContent}
     </section>
   )
 }
