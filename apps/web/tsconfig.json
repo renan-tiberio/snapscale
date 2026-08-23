@@ -4,10 +4,11 @@
   "compilerOptions": {
     "baseUrl": ".",
     "outDir": "dist",
+    "types": ["vite/client"],
     "paths": {
       "@/*": ["./src/*"],
       "~/*": ["./*"]
     }
   },
-  "include": ["src"]
+  "include": ["src", "vite.config.ts", ".storybook/main.ts", ".storybook/preview.ts"]
 }
