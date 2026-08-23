@@ -25,7 +25,8 @@ export interface UseAlbumsResult {
   isUpdating: boolean
   updateError: ApiError | null
   deleteAlbum: (id: string) => void
-  isDeleting: boolean
+  /** The id of the album currently being deleted, or `null` when no delete is in flight. */
+  deletingAlbumId: string | null
   deleteError: ApiError | null
 }
 
@@ -68,7 +69,7 @@ export function useAlbums(): UseAlbumsResult {
     isUpdating: updateMutation.isPending,
     updateError: updateMutation.error,
     deleteAlbum: deleteMutation.mutate,
-    isDeleting: deleteMutation.isPending,
+    deletingAlbumId: deleteMutation.isPending ? deleteMutation.variables ?? null : null,
     deleteError: deleteMutation.error,
   }
 }

@@ -1,5 +1,6 @@
 import { ERROR_CODES } from '@snapscale/shared'
 import axios from 'axios'
+import { z } from 'zod'
 
 import type { ApiResponse, SessionResponse } from '@snapscale/shared'
 import type { AxiosError, AxiosResponse } from 'axios'
@@ -7,6 +8,22 @@ import type { AxiosError, AxiosResponse } from 'axios'
 import { getItem, removeItem, setItem } from '@/services/storage'
 import { API_BASE_URL } from '@/utils/env'
 import { emitAppEvent } from '@/utils/events'
+
+const GENERIC_ERROR_MESSAGE = 'Unexpected error while contacting the API'
+
+/**
+ * Minimal shape of the `ApiResponse<T>` envelope needed to build an `ApiError`
+ * — just enough to validate an untrusted response body before reading it.
+ */
+const errorEnvelopeSchema = z.object({
+  success: z.boolean(),
+  error: z
+    .object({
+      code: z.string(),
+      message: z.string(),
+    })
+    .optional(),
+})
 
 /** Normalized API failure: always carries the machine-readable contract code. */
 export class ApiError extends Error {
@@ -35,11 +52,15 @@ export function clearStoredSession(): void {
 }
 
 function toApiError(payload: unknown, status: number): ApiError {
-  const envelope = payload as ApiResponse<unknown> | undefined
+  const parsed = errorEnvelopeSchema.safeParse(payload)
+
+  if (!parsed.success) {
+    return new ApiError(ERROR_CODES.INTERNAL, GENERIC_ERROR_MESSAGE, status)
+  }
 
   return new ApiError(
-    envelope?.error?.code ?? ERROR_CODES.INTERNAL,
-    envelope?.error?.message ?? 'Unexpected error while contacting the API',
+    parsed.data.error?.code ?? ERROR_CODES.INTERNAL,
+    parsed.data.error?.message ?? GENERIC_ERROR_MESSAGE,
     status,
   )
 }

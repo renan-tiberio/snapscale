@@ -6,8 +6,16 @@ import { useAuth } from '@/hooks/queries/useAuth'
 
 export function Albums() {
   const { user, logout } = useAuth()
-  const { albums, isLoading, error, createAlbum, isCreating, createError, deleteAlbum, isDeleting } =
-    useAlbums()
+  const {
+    albums,
+    isLoading,
+    error,
+    createAlbum,
+    isCreating,
+    createError,
+    deleteAlbum,
+    deletingAlbumId,
+  } = useAlbums()
 
   const isEmpty = !isLoading && error === null && albums.length === 0
 
@@ -47,7 +55,7 @@ export function Albums() {
               album={album}
               href={`/albums/${album.id}`}
               onDelete={deleteAlbum}
-              isDeleting={isDeleting}
+              isDeleting={deletingAlbumId === album.id}
             />
           </li>
         ))}
