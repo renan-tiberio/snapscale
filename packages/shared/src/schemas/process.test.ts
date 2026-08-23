@@ -137,7 +137,7 @@ describe('processImageParamsSchema — quality', () => {
 
 describe('processImageParamsSchema — imageId', () => {
   it('rejects a missing imageId', () => {
-    const { imageId: _imageId, ...withoutImageId } = validBase
+    const withoutImageId = { width: validBase.width, height: validBase.height, filter: validBase.filter }
     const result = processImageParamsSchema.safeParse(withoutImageId)
 
     expect(result.success).toBe(false)

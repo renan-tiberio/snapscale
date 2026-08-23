@@ -14,12 +14,12 @@ describe('ERROR_CODES', () => {
   })
 
   it.each([
-    ['UNAUTHORIZED', 'UNAUTHORIZED'],
-    ['NOT_FOUND', 'NOT_FOUND'],
-    ['VALIDATION_ERROR', 'VALIDATION_ERROR'],
-    ['RATE_LIMITED', 'RATE_LIMITED'],
-    ['INTERNAL', 'INTERNAL'],
+    ['UNAUTHORIZED', ERROR_CODES.UNAUTHORIZED],
+    ['NOT_FOUND', ERROR_CODES.NOT_FOUND],
+    ['VALIDATION_ERROR', ERROR_CODES.VALIDATION_ERROR],
+    ['RATE_LIMITED', ERROR_CODES.RATE_LIMITED],
+    ['INTERNAL', ERROR_CODES.INTERNAL],
   ])('maps %s to the literal %s', (key, value) => {
-    expect(ERROR_CODES[key]).toBe(value)
+    expect(value).toBe(key)
   })
 })

@@ -1,4 +1,9 @@
-// STUB (RED phase) — permissive placeholder, filled in during the GREEN implementation.
+import type { ErrorCode } from './error-codes.js'
+
+/**
+ * Response envelope every API route returns. Single source of truth for
+ * `docs/03-technical-design.md` §4.
+ */
 export interface ApiResponse<T> {
   success: boolean
   data?: T
@@ -6,12 +11,12 @@ export interface ApiResponse<T> {
   meta?: { total: number; page: number; limit: number }
 }
 
+/** Builds a success envelope, optionally carrying pagination meta. */
 export function ok<T>(data: T, meta?: ApiResponse<T>['meta']): ApiResponse<T> {
-  return { success: true, data, meta }
+  return meta === undefined ? { success: true, data } : { success: true, data, meta }
 }
 
-// Intentionally wrong shape for the RED phase: real implementation must flip
-// `success` to false and populate `error`.
-export function fail(_code: string, _message: string): ApiResponse<never> {
-  return { success: true }
+/** Builds a failure envelope; `data` stays absent. */
+export function fail(code: ErrorCode | string, message: string): ApiResponse<never> {
+  return { success: false, error: { code, message } }
 }
