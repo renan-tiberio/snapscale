@@ -87,3 +87,5 @@ documented contract — is rewritten, never removed, and recorded with its evide
 | [`docs/03-technical-design.md`](docs/03-technical-design.md) | How each piece is built — stack, contracts, schemas, conventions |
 | [`docs/04-implementation-plan.md`](docs/04-implementation-plan.md) | The phased task breakdown |
 | [`docs/05-decision-log.md`](docs/05-decision-log.md) | Every choice, its rejected alternatives, and the trade-off accepted |
+
+Phase 1 evidence: see [docs/evidence/phase-1/verification.md](docs/evidence/phase-1/verification.md) for the final gate verification report.

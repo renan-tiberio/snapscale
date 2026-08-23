@@ -1,0 +1,19 @@
+Command:
+  E2E_WEB_URL=http://localhost:5174 E2E_API_URL=http://localhost:4001 E2E_MAILHOG_URL=http://localhost:8026 \
+    pnpm --filter @snapscale/e2e exec playwright test
+
+Run against: docker compose -p snapscale-verify -f docker-compose.yml -f <override> up -d --build
+(isolated project, ports remapped: api 4001, web 5174, mailhog 1026/8026, postgres 5434)
+
+Verbatim output:
+
+.                                        |  WARN  Unsupported engine: wanted: {"node":"22.x"} (current: {"node":"v24.18.1","pnpm":"9.15.0"})
+
+Running 2 tests using 1 worker
+
+  ✓  1 [chromium] › tests/gallery-journey.spec.ts:37:1 › full gallery journey: OTP sign-in, album, upload, process, rendered result (735ms)
+  ✓  2 [chromium] › tests/gallery-journey.spec.ts:134:1 › an invalid OTP code shows an error and does not authenticate (314ms)
+
+  2 passed (1.5s)
+
+Exit code: 0
