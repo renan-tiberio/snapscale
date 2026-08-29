@@ -50,9 +50,7 @@ describe('TextInput', () => {
 
   it('picks up a caller-provided className when re-rendered', () => {
     const { rerender } = render(<TextInput label="Email" value="" onChange={() => undefined} />)
-    rerender(
-      <TextInput label="Email" value="" onChange={() => undefined} className="w-full" />,
-    )
+    rerender(<TextInput label="Email" value="" onChange={() => undefined} className="w-full" />)
 
     expect(screen.getByLabelText('Email')).toHaveClass('w-full')
   })

@@ -6,7 +6,6 @@ import type { FormEvent } from 'react'
 import { Button } from '@/components/atoms/Button'
 import { TextInput } from '@/components/atoms/TextInput'
 
-
 export function CreateAlbumForm({
   onCreate,
   isCreating = false,

@@ -1,7 +1,6 @@
 import { IMAGE_FILTERS } from '@snapscale/shared'
 import { useId, useState } from 'react'
 
-
 import type { ProcessImagePanelProps } from './ProcessImagePanel.types'
 import type { ImageFilter } from '@snapscale/shared'
 import type { FormEvent, ReactNode } from 'react'

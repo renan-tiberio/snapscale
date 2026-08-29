@@ -6,7 +6,13 @@ const VARIANT_CLASSES: Record<NonNullable<ButtonProps['variant']>, string> = {
     'border border-brand-600 bg-transparent text-brand-600 hover:bg-brand-50 disabled:border-brand-300 disabled:text-brand-300',
 }
 
-export function Button({ children, variant = 'primary', className = '', ref, ...props }: ButtonProps) {
+export function Button({
+  children,
+  variant = 'primary',
+  className = '',
+  ref,
+  ...props
+}: ButtonProps) {
   return (
     <button
       ref={ref}

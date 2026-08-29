@@ -5,8 +5,13 @@ import type { ReactNode } from 'react'
 
 import { Button } from '@/components/atoms/Button'
 
-
-export function ImageCard({ image, src, onProcess, isSelected = false, onImageError }: ImageCardProps) {
+export function ImageCard({
+  image,
+  src,
+  onProcess,
+  isSelected = false,
+  onImageError,
+}: ImageCardProps) {
   // Tracks the `src` value that last failed, not just a boolean — once a
   // fresh token produces a different `src`, this naturally stops matching
   // and the error state clears without an effect.

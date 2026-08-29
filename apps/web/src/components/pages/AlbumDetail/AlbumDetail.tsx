@@ -12,7 +12,6 @@ import { useImages } from '@/hooks/queries/useImages'
 import { useProcessImage } from '@/hooks/queries/useProcessImage'
 import { imageFileUrl, processedImageUrl } from '@/utils/imageUrls'
 
-
 export function AlbumDetail() {
   const { albumId = '' } = useParams()
   // The short-lived `scope: 'file'` token, never the session token — see
@@ -69,7 +68,7 @@ export function AlbumDetail() {
   return (
     <main className="mx-auto flex max-w-5xl flex-col gap-6 px-6 py-10">
       <header className="flex flex-col gap-2">
-        <Link to="/" className="text-sm text-brand-600 hover:underline">
+        <Link to="/" className="text-brand-600 text-sm hover:underline">
           ← Back to albums
         </Link>
         <h1 className="text-2xl font-semibold">{album?.name ?? 'Album'}</h1>

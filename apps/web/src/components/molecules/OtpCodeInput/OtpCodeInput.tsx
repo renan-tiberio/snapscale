@@ -2,7 +2,6 @@ import type { OtpCodeInputProps } from './OtpCodeInput.types'
 
 import { TextInput } from '@/components/atoms/TextInput'
 
-
 const OTP_LENGTH = 6
 const NON_DIGITS = /\D/g
 

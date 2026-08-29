@@ -2,7 +2,6 @@ import { fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 
-
 import { ImageCard } from './ImageCard'
 
 import type { ImageCardProps } from './ImageCard.types'

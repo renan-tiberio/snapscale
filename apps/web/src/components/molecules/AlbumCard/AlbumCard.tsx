@@ -4,7 +4,6 @@ import type { AlbumCardProps } from './AlbumCard.types'
 
 import { Button } from '@/components/atoms/Button'
 
-
 export function AlbumCard({ album, href, onDelete, isDeleting = false }: AlbumCardProps) {
   return (
     <article className="flex h-full flex-col gap-2 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
