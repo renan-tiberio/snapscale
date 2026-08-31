@@ -6,13 +6,13 @@ import { renderApp, seedSession } from '@/test/utils'
 
 describe('ProtectedRoute', () => {
   it('sends an anonymous visitor of the album list to the login screen', async () => {
-    renderApp(['/'])
+    renderApp({ initialEntries: ['/'] })
 
     expect(await screen.findByRole('heading', { name: 'Sign in to SnapScale' })).toBeInTheDocument()
   })
 
   it('sends an anonymous visitor of an album to the login screen', async () => {
-    renderApp([`/albums/${fixtures.album.id}`])
+    renderApp({ initialEntries: [`/albums/${fixtures.album.id}`] })
 
     expect(await screen.findByRole('heading', { name: 'Sign in to SnapScale' })).toBeInTheDocument()
   })
@@ -20,7 +20,7 @@ describe('ProtectedRoute', () => {
   it('lets an authenticated visitor through to the album list', async () => {
     seedSession()
 
-    renderApp(['/'])
+    renderApp({ initialEntries: ['/'] })
 
     expect(await screen.findByRole('heading', { name: 'Albums' })).toBeInTheDocument()
   })

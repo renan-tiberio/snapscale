@@ -1,14 +1,21 @@
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { Button } from './Button'
 
-describe('Button', () => {
-  it('fires onClick when clicked', async () => {
-    const user = userEvent.setup()
-    const onClick = vi.fn()
+import type { UserEvent } from '@testing-library/user-event'
 
+describe('Button', () => {
+  let user: UserEvent
+  let onClick: () => void
+
+  beforeEach(() => {
+    user = userEvent.setup()
+    onClick = vi.fn()
+  })
+
+  it('fires onClick when clicked', async () => {
     render(<Button onClick={onClick}>Save</Button>)
     await user.click(screen.getByRole('button', { name: 'Save' }))
 
@@ -16,9 +23,6 @@ describe('Button', () => {
   })
 
   it('does not fire onClick when disabled', async () => {
-    const user = userEvent.setup()
-    const onClick = vi.fn()
-
     render(
       <Button onClick={onClick} disabled>
         Save

@@ -7,7 +7,7 @@ import * as schema from '@/db/schema.js'
 export type Database = NodePgDatabase<typeof schema>
 
 /** A pg pool plus the drizzle client that wraps it; `close()` drains the pool. */
-export interface DatabaseHandle {
+export type DatabaseHandle = {
   readonly pool: Pool
   readonly db: Database
   close: () => Promise<void>
@@ -18,7 +18,11 @@ export interface DatabaseHandle {
  * than a module-level singleton so tests can point at a throwaway Postgres
  * (docs/05-decision-log.md decision 11) without touching process env.
  */
-export function createDatabase(connectionString: string): DatabaseHandle {
+export const createDatabase = ({
+  connectionString,
+}: {
+  connectionString: string
+}): DatabaseHandle => {
   const pool = new Pool({ connectionString })
 
   return {

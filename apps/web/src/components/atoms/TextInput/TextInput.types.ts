@@ -1,10 +1,9 @@
 import type { InputHTMLAttributes } from 'react'
 
-export interface TextInputProps extends Omit<
-  InputHTMLAttributes<HTMLInputElement>,
-  'value' | 'onChange'
-> {
+export type TextInputChange = { value: string }
+
+export type TextInputProps = Omit<InputHTMLAttributes<HTMLInputElement>, 'value' | 'onChange'> & {
   label: string
   value: string
-  onChange: (value: string) => void
+  onChange: (change: TextInputChange) => void
 }

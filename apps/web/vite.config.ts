@@ -36,6 +36,12 @@ export default defineConfig({
     },
   },
   test: {
+    // Tests resolve @snapscale/shared from source: `dist` is a build artifact, and turbo's
+    // `test` tasks carry no `^build` edge, so a stale one would green the suite. Scoped to
+    // `test` so dev, build and storybook keep consuming the published entry point.
+    alias: {
+      '@snapscale/shared': new URL('../../packages/shared/src/index.ts', import.meta.url).pathname,
+    },
     environment: 'jsdom',
     globals: true,
     setupFiles: ['./src/test/setup.ts'],

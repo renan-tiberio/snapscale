@@ -4,7 +4,7 @@ import { CreateAlbumForm } from '@/components/organisms/CreateAlbumForm'
 import { useAlbums } from '@/hooks/queries/useAlbums'
 import { useAuth } from '@/hooks/queries/useAuth'
 
-export function Albums() {
+export const Albums = () => {
   const { user, logout } = useAuth()
   const {
     albums,
@@ -54,7 +54,7 @@ export function Albums() {
             <AlbumCard
               album={album}
               href={`/albums/${album.id}`}
-              onDelete={deleteAlbum}
+              onDelete={({ albumId }) => deleteAlbum({ id: albumId })}
               isDeleting={deletingAlbumId === album.id}
             />
           </li>

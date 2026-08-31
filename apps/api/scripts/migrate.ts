@@ -1,15 +1,15 @@
-import { loadConfig } from '@/config.js'
+import { loadConfig } from '@/config/index.js'
 import { createDatabase } from '@/db/index.js'
-import { runMigrations } from '@/db/migrate.js'
+import { runMigrations } from '@/db/migrate/index.js'
 
 /**
  * `pnpm db:migrate` — applies pending migrations to `DATABASE_URL` and exits.
  * Safe to run on every deploy: `runMigrations` is idempotent.
  */
-const database = createDatabase(loadConfig().DATABASE_URL)
+const database = createDatabase({ connectionString: loadConfig().DATABASE_URL })
 
 try {
-  await runMigrations(database.db)
+  await runMigrations({ db: database.db })
 } finally {
   await database.close()
 }

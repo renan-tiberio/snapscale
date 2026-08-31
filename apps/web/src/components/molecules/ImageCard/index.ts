@@ -1,2 +1,2 @@
 export { ImageCard } from './ImageCard'
-export type { ImageCardProps } from './ImageCard.types'
+export type { ImageCardProcessRequest, ImageCardProps } from './ImageCard.types'

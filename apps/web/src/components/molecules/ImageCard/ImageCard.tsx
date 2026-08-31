@@ -5,53 +5,55 @@ import type { ReactNode } from 'react'
 
 import { Button } from '@/components/atoms/Button'
 
-export function ImageCard({
+export const ImageCard = ({
   image,
   src,
   onProcess,
   isSelected = false,
   onImageError,
-}: ImageCardProps) {
+}: ImageCardProps) => {
   // Tracks the `src` value that last failed, not just a boolean — once a
   // fresh token produces a different `src`, this naturally stops matching
   // and the error state clears without an effect.
   const [erroredSrc, setErroredSrc] = useState<string | null>(null)
   const hasError = src !== null && erroredSrc === src
 
-  function handleError() {
+  const handleError = () => {
     setErroredSrc(src)
     onImageError?.()
   }
 
-  function handleRetry() {
+  const handleRetry = () => {
     setErroredSrc(null)
     onImageError?.()
   }
 
-  let media: ReactNode
+  const renderMedia = (): ReactNode => {
+    if (hasError) {
+      return (
+        <div
+          role="alert"
+          className="flex h-40 w-full flex-col items-center justify-center gap-2 rounded-md bg-slate-100 text-sm text-slate-600"
+        >
+          <span>Image failed to load</span>
+          <Button variant="secondary" onClick={handleRetry}>
+            Retry
+          </Button>
+        </div>
+      )
+    }
 
-  if (hasError) {
-    media = (
-      <div
-        role="alert"
-        className="flex h-40 w-full flex-col items-center justify-center gap-2 rounded-md bg-slate-100 text-sm text-slate-600"
-      >
-        <span>Image failed to load</span>
-        <Button variant="secondary" onClick={handleRetry}>
-          Retry
-        </Button>
-      </div>
-    )
-  } else if (src === null) {
-    media = (
-      <div
-        role="status"
-        aria-label={`Loading ${image.originalFilename}`}
-        className="h-40 w-full animate-pulse rounded-md bg-slate-100"
-      />
-    )
-  } else {
-    media = (
+    if (src === null) {
+      return (
+        <div
+          role="status"
+          aria-label={`Loading ${image.originalFilename}`}
+          className="h-40 w-full animate-pulse rounded-md bg-slate-100"
+        />
+      )
+    }
+
+    return (
       <img
         src={src}
         alt={image.originalFilename}
@@ -63,7 +65,7 @@ export function ImageCard({
 
   return (
     <figure className="flex flex-col gap-2 rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
-      {media}
+      {renderMedia()}
       <figcaption className="flex flex-col gap-1 text-sm">
         <span className="truncate font-medium text-slate-800">{image.originalFilename}</span>
         <span className="text-slate-500">
@@ -73,7 +75,7 @@ export function ImageCard({
       <Button
         aria-label={`Process ${image.originalFilename}`}
         aria-pressed={isSelected}
-        onClick={() => onProcess(image.id)}
+        onClick={() => onProcess({ imageId: image.id })}
       >
         Process
       </Button>

@@ -11,12 +11,16 @@ import { AuthProvider } from '@/context/AuthContext'
 import { routes } from '@/router'
 import { setItem } from '@/services/storage'
 
-
+type SeedSessionParams = { session?: SessionResponse }
 
 /** Writes a valid session to localStorage so a render starts authenticated. */
-export function seedSession(session: SessionResponse = { token: TEST_TOKEN, user: testUser }): void {
-  setItem('session', session)
+export const seedSession = ({
+  session = { token: TEST_TOKEN, user: testUser },
+}: SeedSessionParams = {}): void => {
+  setItem({ key: 'session', value: session })
 }
+
+type WriteRawStorageItemParams = { key: string; value: string }
 
 /**
  * Writes a raw, unvalidated string directly to the browser's storage engine —
@@ -25,36 +29,35 @@ export function seedSession(session: SessionResponse = { token: TEST_TOKEN, user
  * hatch outside `services/storage`; it exists to construct exactly the kind
  * of input that wrapper is meant to guard against.
  */
-export function writeRawStorageItem(key: string, value: string): void {
+export const writeRawStorageItem = ({ key, value }: WriteRawStorageItemParams): void => {
   Storage.prototype.setItem.call(window.localStorage, key, value)
 }
 
 /** Query client for tests: no retries (errors surface immediately), no cache reuse. */
-export function createTestQueryClient(): QueryClient {
-  return new QueryClient({
+export const createTestQueryClient = (): QueryClient =>
+  new QueryClient({
     defaultOptions: {
       queries: { retry: false, gcTime: 0 },
       mutations: { retry: false },
     },
   })
-}
 
 /** Wrapper for `renderHook`: query client + auth provider, no router needed. */
-export function createHookWrapper() {
+export const createHookWrapper = () => {
   const queryClient = createTestQueryClient()
 
-  return function Wrapper({ children }: { children: ReactNode }) {
-    return (
-      <QueryClientProvider client={queryClient}>
-        <AuthProvider>{children}</AuthProvider>
-      </QueryClientProvider>
-    )
-  }
+  const Wrapper = ({ children }: { children: ReactNode }) => (
+    <QueryClientProvider client={queryClient}>
+      <AuthProvider>{children}</AuthProvider>
+    </QueryClientProvider>
+  )
+
+  return Wrapper
 }
 
-function AppRoutes() {
-  return useRoutes(routes)
-}
+const AppRoutes = () => useRoutes(routes)
+
+type RenderAppParams = { initialEntries?: string[] }
 
 /**
  * Mounts the real route tree (App provides the query client + auth context).
@@ -65,10 +68,9 @@ function AppRoutes() {
  * the brand check fails and the navigation never lands. The route objects are
  * the very same ones `router.tsx` ships to the browser.
  */
-export function renderApp(initialEntries: string[] = ['/']) {
-  return render(
+export const renderApp = ({ initialEntries = ['/'] }: RenderAppParams = {}) =>
+  render(
     <MemoryRouter initialEntries={initialEntries}>
       <AppRoutes />
     </MemoryRouter>,
   )
-}

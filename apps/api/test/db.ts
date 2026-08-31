@@ -4,19 +4,19 @@ import { Client } from 'pg'
 import { inject } from 'vitest'
 
 import { createDatabase, type DatabaseHandle } from '@/db/index.js'
-import { runMigrations } from '@/db/migrate.js'
+import { runMigrations } from '@/db/migrate/index.js'
 
 /** Every table the api owns, ordered so a single TRUNCATE ... CASCADE is enough. */
 const TABLES = ['processed_images', 'images', 'albums', 'otp_codes', 'users'] as const
 
-export interface TestDatabase extends DatabaseHandle {
+export type TestDatabase = DatabaseHandle & {
   /** Connection string of the freshly created, test-owned database. */
   readonly url: string
   /** Closes the pool and drops the database from the shared container. */
   destroy: () => Promise<void>
 }
 
-async function withAdminClient<T>(run: (client: Client) => Promise<T>): Promise<T> {
+const withAdminClient = async <T>({ run }: { run: (client: Client) => Promise<T> }): Promise<T> => {
   const client = new Client({ connectionString: inject('postgresUri') })
   await client.connect()
   try {
@@ -31,18 +31,18 @@ async function withAdminClient<T>(run: (client: Client) => Promise<T>): Promise<
  * default) migrates it. One per test file keeps files from coupling through
  * shared rows — the false-positive class docs/03 §9 bans.
  */
-export async function createTestDatabase(
-  options: { readonly migrate?: boolean } = {},
-): Promise<TestDatabase> {
+export const createTestDatabase = async ({
+  migrate = true,
+}: { readonly migrate?: boolean } = {}): Promise<TestDatabase> => {
   const name = `test_${randomUUID().replaceAll('-', '')}`
-  await withAdminClient((client) => client.query(`create database "${name}"`))
+  await withAdminClient({ run: (client) => client.query(`create database "${name}"`) })
 
   const url = new URL(inject('postgresUri'))
   url.pathname = `/${name}`
-  const handle = createDatabase(url.toString())
+  const handle = createDatabase({ connectionString: url.toString() })
 
-  if (options.migrate !== false) {
-    await runMigrations(handle.db)
+  if (migrate) {
+    await runMigrations({ db: handle.db })
   }
 
   return {
@@ -50,18 +50,26 @@ export async function createTestDatabase(
     url: url.toString(),
     destroy: async () => {
       await handle.close()
-      await withAdminClient((client) => client.query(`drop database "${name}" with (force)`))
+      await withAdminClient({
+        run: (client) => client.query(`drop database "${name}" with (force)`),
+      })
     },
   }
 }
 
 /** Empties every api table — call between tests inside a file. */
-export async function truncateAll(handle: DatabaseHandle): Promise<void> {
+export const truncateAll = async ({ handle }: { handle: DatabaseHandle }): Promise<void> => {
   await handle.pool.query(`truncate table ${TABLES.join(', ')} restart identity cascade`)
 }
 
 /** Counts rows in a table without going through a repository. */
-export async function countRows(handle: DatabaseHandle, table: string): Promise<number> {
+export const countRows = async ({
+  handle,
+  table,
+}: {
+  handle: DatabaseHandle
+  table: string
+}): Promise<number> => {
   const result = await handle.pool.query<{ count: string }>(`select count(*)::text from ${table}`)
   return Number(result.rows[0]?.count ?? '-1')
 }

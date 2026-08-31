@@ -4,25 +4,28 @@ import type { MailhogConnection } from './mailhog-container.js'
 
 /**
  * Test-file-side access to the run's single MailHog container started by
- * `global-setup.ts` (via `./mailhog-container.ts`). This file, unlike that
- * one, is fine importing `vitest` (`inject`) — test files run in vitest's
+ * `global-setup.ts` (via `./mailhog-container.ts`). Unlike that file, this
+ * one is fine importing `vitest` (`inject`) — test files run in vitest's
  * normal worker context, not the separate `globalSetup` context.
  */
 
 declare module 'vitest' {
+  // `type` cannot participate in declaration merging — vitest's `ProvidedContext`
+  // can only be augmented via `interface` (docs/06-code-standards.md §2).
+  // eslint-disable-next-line @typescript-eslint/consistent-type-definitions
   interface ProvidedContext {
     /** Connection info for the run's one throwaway MailHog container. */
     mailhogConnection: MailhogConnection
   }
 }
 
-export interface MailhogMessage {
+export type MailhogMessage = {
   readonly to: readonly string[]
   readonly subject: string
   readonly body: string
 }
 
-export interface TestMailhog {
+export type TestMailhog = {
   readonly smtpHost: string
   readonly smtpPort: number
   /** Messages currently in the inbox whose `To` header contains `email`. */
@@ -31,7 +34,7 @@ export interface TestMailhog {
   purge: () => Promise<void>
 }
 
-interface RawMailhogItem {
+type RawMailhogItem = {
   readonly Content: {
     readonly Headers: {
       readonly To?: readonly string[]
@@ -41,24 +44,22 @@ interface RawMailhogItem {
   }
 }
 
-interface RawMailhogList {
+type RawMailhogList = {
   readonly items: readonly RawMailhogItem[]
 }
 
-function toMessage(item: RawMailhogItem): MailhogMessage {
-  return {
-    to: item.Content.Headers.To ?? [],
-    subject: item.Content.Headers.Subject?.[0] ?? '',
-    body: item.Content.Body,
-  }
-}
+const toMessage = ({ item }: { item: RawMailhogItem }): MailhogMessage => ({
+  to: item.Content.Headers.To ?? [],
+  subject: item.Content.Headers.Subject?.[0] ?? '',
+  body: item.Content.Body,
+})
 
 /**
  * Connects a test file to the run's already-started MailHog container
  * (provided by `global-setup.ts`). Cheap and synchronous — no container
  * lifecycle here; call `purge()` between tests for isolation instead.
  */
-export function connectToMailhog(): TestMailhog {
+export const connectToMailhog = (): TestMailhog => {
   const { host, smtpPort, httpPort } = inject('mailhogConnection')
   const apiUrl = `http://${host}:${httpPort}/api/v2/messages`
   const deleteUrl = `http://${host}:${httpPort}/api/v1/messages`
@@ -69,7 +70,9 @@ export function connectToMailhog(): TestMailhog {
     fetchMessagesTo: async (email) => {
       const response = await fetch(apiUrl)
       const body = (await response.json()) as RawMailhogList
-      return body.items.map(toMessage).filter((message) => message.to.includes(email))
+      return body.items
+        .map((item) => toMessage({ item }))
+        .filter((message) => message.to.includes(email))
     },
     purge: async () => {
       await fetch(deleteUrl, { method: 'DELETE' })
@@ -83,12 +86,17 @@ export function connectToMailhog(): TestMailhog {
  * message instead of assuming it is already indexed the instant the HTTP
  * response for `/auth/otp/request` comes back.
  */
-export async function waitForMessagesTo(
-  mailhog: TestMailhog,
-  email: string,
+export const waitForMessagesTo = async ({
+  mailhog,
+  email,
   attempts = 20,
   delayMs = 250,
-): Promise<MailhogMessage[]> {
+}: {
+  mailhog: TestMailhog
+  email: string
+  attempts?: number
+  delayMs?: number
+}): Promise<MailhogMessage[]> => {
   for (let attempt = 0; attempt < attempts; attempt += 1) {
     const messages = await mailhog.fetchMessagesTo(email)
 

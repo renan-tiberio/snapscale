@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router'
 
+import type { ImageCardProcessRequest } from '@/components/molecules/ImageCard'
 import type { ImageProcessOptions } from '@snapscale/shared'
 
 import { ImageCard } from '@/components/molecules/ImageCard'
@@ -12,13 +13,15 @@ import { useImages } from '@/hooks/queries/useImages'
 import { useProcessImage } from '@/hooks/queries/useProcessImage'
 import { imageFileUrl, processedImageUrl } from '@/utils/imageUrls'
 
-export function AlbumDetail() {
+export const AlbumDetail = () => {
   const { albumId = '' } = useParams()
   // The short-lived `scope: 'file'` token, never the session token — see
   // `hooks/queries/useFileToken.ts` and `utils/imageUrls.ts`.
   const { fileToken, refresh: refreshFileToken } = useFileToken()
   const { albums } = useAlbums()
-  const { images, isLoading, error, uploadImage, isUploading, uploadError } = useImages(albumId)
+  const { images, isLoading, error, uploadImage, isUploading, uploadError } = useImages({
+    albumId,
+  })
   const { processImage, processedImage, isProcessing, processError, reset } = useProcessImage()
   const [selectedImageId, setSelectedImageId] = useState<string | null>(null)
 
@@ -36,7 +39,9 @@ export function AlbumDetail() {
       return new Map<string, string>()
     }
 
-    return new Map(images.map((image) => [image.id, imageFileUrl(image.id, fileToken)]))
+    return new Map(
+      images.map((image) => [image.id, imageFileUrl({ imageId: image.id, token: fileToken })]),
+    )
   }, [images, fileToken])
 
   const resultUrl = useMemo(() => {
@@ -44,20 +49,20 @@ export function AlbumDetail() {
       return null
     }
 
-    return processedImageUrl(processedImage.storagePath, fileToken)
+    return processedImageUrl({ storagePath: processedImage.storagePath, token: fileToken })
   }, [processedImage, fileToken])
 
-  function handleSelect(imageId: string) {
+  const handleSelect = ({ imageId }: ImageCardProcessRequest) => {
     reset()
     setSelectedImageId(imageId)
   }
 
-  function handleClose() {
+  const handleClose = () => {
     reset()
     setSelectedImageId(null)
   }
 
-  function handleProcess(options: ImageProcessOptions) {
+  const handleProcess = (options: ImageProcessOptions) => {
     if (selectedImage === null) {
       return
     }

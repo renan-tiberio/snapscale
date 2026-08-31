@@ -21,7 +21,7 @@ export const TEST_TOKEN = 'test-session-token'
  * decodes that claim to schedule its own refresh — a plain opaque string
  * would make every decode-dependent spec meaningless.
  */
-export const TEST_FILE_TOKEN = createFileTokenWithTtlMs(60_000)
+export const TEST_FILE_TOKEN = createFileTokenWithTtlMs({ ttlMs: 60_000 })
 export const VALID_OTP = '123456'
 
 export const testUser: User = {
@@ -68,14 +68,14 @@ export const fixtures = {
   image: imageFixture,
 }
 
-interface ApiState {
+type ApiState = {
   albums: Album[]
   images: Image[]
 }
 
 let state: ApiState = { albums: [], images: [] }
 
-export function resetApiState(): void {
+export const resetApiState = (): void => {
   state = {
     albums: [{ ...albumFixture }, { ...secondAlbumFixture }],
     images: [{ ...imageFixture }],
@@ -86,48 +86,56 @@ resetApiState()
 
 let sequence = 0
 
-function nextId(prefix: string): string {
+type NextIdParams = { prefix: string }
+
+const nextId = ({ prefix }: NextIdParams): string => {
   sequence += 1
   return `${prefix}${String(sequence).padStart(4, '0')}-4111-8111-111111111111`
 }
 
 export const handlers = [
-  http.post(`${API_BASE}/auth/otp/request`, () => HttpResponse.json(ok({ requested: true }))),
+  http.post(`${API_BASE}/auth/otp/request`, () =>
+    HttpResponse.json(ok({ data: { requested: true } })),
+  ),
 
   http.post(`${API_BASE}/auth/otp/verify`, async ({ request }) => {
     const body = (await request.json()) as { email: string; code: string }
 
     if (body.code !== VALID_OTP) {
       return HttpResponse.json(
-        fail(ERROR_CODES.UNAUTHORIZED, 'Invalid or expired code'),
+        fail({ code: ERROR_CODES.UNAUTHORIZED, message: 'Invalid or expired code' }),
         { status: 401 },
       )
     }
 
-    return HttpResponse.json(ok({ token: TEST_TOKEN, user: { ...testUser, email: body.email } }))
+    return HttpResponse.json(
+      ok({ data: { token: TEST_TOKEN, user: { ...testUser, email: body.email } } }),
+    )
   }),
 
-  http.get(`${API_BASE}/auth/file-token`, () => HttpResponse.json(ok({ token: TEST_FILE_TOKEN }))),
+  http.get(`${API_BASE}/auth/file-token`, () =>
+    HttpResponse.json(ok({ data: { token: TEST_FILE_TOKEN } })),
+  ),
 
   http.get(`${API_BASE}/albums`, () =>
     HttpResponse.json(
-      ok(state.albums, { total: state.albums.length, page: 1, limit: 20 }),
+      ok({ data: state.albums, meta: { total: state.albums.length, page: 1, limit: 20 } }),
     ),
   ),
 
   http.post(`${API_BASE}/albums`, async ({ request }) => {
     const body = (await request.json()) as { name: string; description?: string }
     const album: Album = {
-      id: nextId('cccccccc-'),
+      id: nextId({ prefix: 'cccccccc-' }),
       userId: testUser.id,
       name: body.name,
       description: body.description ?? null,
       createdAt: '2026-08-10T10:00:00.000Z',
       updatedAt: '2026-08-10T10:00:00.000Z',
     }
-    state.albums = [...state.albums, album]
+    state = { ...state, albums: [...state.albums, album] }
 
-    return HttpResponse.json(ok(album), { status: 201 })
+    return HttpResponse.json(ok({ data: album }), { status: 201 })
   }),
 
   http.patch(`${API_BASE}/albums/:id`, async ({ params, request }) => {
@@ -135,26 +143,33 @@ export const handlers = [
     const existing = state.albums.find((album) => album.id === params.id)
 
     if (!existing) {
-      return HttpResponse.json(fail(ERROR_CODES.NOT_FOUND, 'Album not found'), { status: 404 })
+      return HttpResponse.json(fail({ code: ERROR_CODES.NOT_FOUND, message: 'Album not found' }), {
+        status: 404,
+      })
     }
 
     const updated: Album = { ...existing, ...body }
-    state.albums = state.albums.map((album) => (album.id === updated.id ? updated : album))
+    state = {
+      ...state,
+      albums: state.albums.map((album) => (album.id === updated.id ? updated : album)),
+    }
 
-    return HttpResponse.json(ok(updated))
+    return HttpResponse.json(ok({ data: updated }))
   }),
 
   http.delete(`${API_BASE}/albums/:id`, ({ params }) => {
-    state.albums = state.albums.filter((album) => album.id !== params.id)
+    state = { ...state, albums: state.albums.filter((album) => album.id !== params.id) }
 
-    return HttpResponse.json(ok({}))
+    return HttpResponse.json(ok({ data: {} }))
   }),
 
   http.get(`${API_BASE}/images`, ({ request }) => {
     const albumId = new URL(request.url).searchParams.get('albumId')
     const images = state.images.filter((image) => image.albumId === albumId)
 
-    return HttpResponse.json(ok(images, { total: images.length, page: 1, limit: 20 }))
+    return HttpResponse.json(
+      ok({ data: images, meta: { total: images.length, page: 1, limit: 20 } }),
+    )
   }),
 
   http.post(`${API_BASE}/images`, async ({ request }) => {
@@ -163,13 +178,16 @@ export const handlers = [
     const albumId = String(form.get('albumId'))
 
     if (!file) {
-      return HttpResponse.json(fail(ERROR_CODES.VALIDATION_ERROR, 'file is required'), {
-        status: 422,
-      })
+      return HttpResponse.json(
+        fail({ code: ERROR_CODES.VALIDATION_ERROR, message: 'file is required' }),
+        {
+          status: 422,
+        },
+      )
     }
 
     const image: Image = {
-      id: nextId('dddddddd-'),
+      id: nextId({ prefix: 'dddddddd-' }),
       albumId,
       ownerId: testUser.id,
       originalFilename: file.name,
@@ -181,9 +199,9 @@ export const handlers = [
       createdAt: '2026-08-11T10:00:00.000Z',
       updatedAt: '2026-08-11T10:00:00.000Z',
     }
-    state.images = [...state.images, image]
+    state = { ...state, images: [...state.images, image] }
 
-    return HttpResponse.json(ok(image), { status: 201 })
+    return HttpResponse.json(ok({ data: image }), { status: 201 })
   }),
 
   http.post(`${API_BASE}/images/process`, async ({ request }) => {
@@ -196,7 +214,7 @@ export const handlers = [
     }
 
     const processed: ProcessedImage = {
-      id: nextId('eeeeeeee-'),
+      id: nextId({ prefix: 'eeeeeeee-' }),
       imageId: body.imageId,
       params: {
         width: body.width,
@@ -209,6 +227,6 @@ export const handlers = [
       createdAt: '2026-08-12T10:00:00.000Z',
     }
 
-    return HttpResponse.json(ok(processed))
+    return HttpResponse.json(ok({ data: processed }))
   }),
 ]

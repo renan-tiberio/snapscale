@@ -1,3 +1,4 @@
+import { OTP_CODE_LENGTH } from '@snapscale/shared'
 import { useState } from 'react'
 import { Navigate } from 'react-router'
 
@@ -8,11 +9,9 @@ import { TextInput } from '@/components/atoms/TextInput'
 import { OtpCodeInput } from '@/components/molecules/OtpCodeInput'
 import { useAuth } from '@/hooks/queries/useAuth'
 
-
-const OTP_LENGTH = 6
 const MAILHOG_URL = 'http://localhost:8025'
 
-export function Login() {
+export const Login = () => {
   const {
     isAuthenticated,
     requestOtp,
@@ -30,27 +29,27 @@ export function Login() {
   const trimmedEmail = email.trim()
   const errorMessage = verifyError?.message ?? requestOtpError?.message ?? null
 
-  function handleEmailSubmit(event: FormEvent<HTMLFormElement>) {
+  const handleEmailSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
 
     if (trimmedEmail === '' || isRequestingOtp) {
       return
     }
 
-    requestOtp(trimmedEmail)
+    requestOtp({ email: trimmedEmail })
   }
 
-  function handleCodeSubmit(event: FormEvent<HTMLFormElement>) {
+  const handleCodeSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
 
-    if (code.length !== OTP_LENGTH || isVerifying) {
+    if (code.length !== OTP_CODE_LENGTH || isVerifying) {
       return
     }
 
     verifyOtp({ email: trimmedEmail, code })
   }
 
-  function handleUseAnotherEmail() {
+  const handleUseAnotherEmail = () => {
     setCode('')
     resetOtpRequest()
   }
@@ -66,11 +65,15 @@ export function Login() {
       {isOtpRequested ? (
         <form onSubmit={handleCodeSubmit} className="flex flex-col gap-4">
           <p className="text-sm text-slate-600">
-            We sent a {OTP_LENGTH}-digit code to {trimmedEmail}. In local development the email
+            We sent a {OTP_CODE_LENGTH}-digit code to {trimmedEmail}. In local development the email
             lands in MailHog at {MAILHOG_URL}.
           </p>
-          <OtpCodeInput value={code} onChange={setCode} disabled={isVerifying} />
-          <Button type="submit" disabled={code.length !== OTP_LENGTH || isVerifying}>
+          <OtpCodeInput
+            value={code}
+            onChange={({ value }) => setCode(value)}
+            disabled={isVerifying}
+          />
+          <Button type="submit" disabled={code.length !== OTP_CODE_LENGTH || isVerifying}>
             {isVerifying ? 'Verifying…' : 'Verify code'}
           </Button>
           <Button type="button" variant="secondary" onClick={handleUseAnotherEmail}>
@@ -86,7 +89,7 @@ export function Login() {
             label="Email"
             type="email"
             value={email}
-            onChange={setEmail}
+            onChange={({ value }) => setEmail(value)}
             placeholder="you@example.com"
           />
           <Button type="submit" disabled={trimmedEmail === '' || isRequestingOtp}>

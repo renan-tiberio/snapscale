@@ -2,7 +2,9 @@ import { ERROR_CODES, fail, ok } from '@snapscale/shared'
 import { fireEvent, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { delay, http, HttpResponse } from 'msw'
-import { describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it } from 'vitest'
+
+import type { UserEvent } from '@testing-library/user-event'
 
 import { API_BASE, TEST_FILE_TOKEN, fixtures } from '@/test/msw/handlers'
 import { server } from '@/test/msw/server'
@@ -10,95 +12,99 @@ import { renderApp, seedSession } from '@/test/utils'
 
 const ALBUM_ROUTE = `/albums/${fixtures.album.id}`
 
-function pngFile(name = 'beach.png') {
-  return new File(['fake-png-bytes'], name, { type: 'image/png' })
-}
-
-function renderAlbum() {
-  seedSession()
-  return renderApp([ALBUM_ROUTE])
-}
+const pngFile = ({ name = 'beach.png' }: { name?: string } = {}) =>
+  new File(['fake-png-bytes'], name, { type: 'image/png' })
 
 describe('AlbumDetail', () => {
-  it('shows the album name and its images', async () => {
-    renderAlbum()
+  let user: UserEvent
 
-    expect(await screen.findByRole('heading', { name: 'Holidays' })).toBeInTheDocument()
-    expect(await screen.findByRole('img', { name: 'sunset.png' })).toHaveAttribute(
-      'src',
-      `${API_BASE}/images/${fixtures.image.id}/file?token=${encodeURIComponent(TEST_FILE_TOKEN)}`,
-    )
+  const renderAlbum = () => renderApp({ initialEntries: [ALBUM_ROUTE] })
+
+  beforeEach(() => {
+    user = userEvent.setup()
+    seedSession()
   })
 
-  it('shows an uploaded image in the grid', async () => {
-    const user = userEvent.setup()
-    renderAlbum()
-    await screen.findByRole('img', { name: 'sunset.png' })
+  describe('with the seeded album', () => {
+    beforeEach(() => {
+      renderAlbum()
+    })
 
-    await user.upload(screen.getByLabelText('Upload image'), pngFile())
+    it('shows the album name and its images', async () => {
+      expect(await screen.findByRole('heading', { name: 'Holidays' })).toBeInTheDocument()
+      expect(await screen.findByRole('img', { name: 'sunset.png' })).toHaveAttribute(
+        'src',
+        `${API_BASE}/images/${fixtures.image.id}/file?token=${encodeURIComponent(TEST_FILE_TOKEN)}`,
+      )
+    })
 
-    expect(await screen.findByRole('img', { name: 'beach.png' })).toBeInTheDocument()
-  })
+    it('shows an uploaded image in the grid', async () => {
+      await screen.findByRole('img', { name: 'sunset.png' })
 
-  it('shows the API error message when the upload is rejected', async () => {
-    server.use(
-      http.post(`${API_BASE}/images`, () =>
-        HttpResponse.json(fail(ERROR_CODES.VALIDATION_ERROR, 'File too large'), { status: 422 }),
-      ),
-    )
-    const user = userEvent.setup()
-    renderAlbum()
-    await screen.findByRole('img', { name: 'sunset.png' })
+      await user.upload(screen.getByLabelText('Upload image'), pngFile())
 
-    await user.upload(screen.getByLabelText('Upload image'), pngFile('huge.png'))
+      expect(await screen.findByRole('img', { name: 'beach.png' })).toBeInTheDocument()
+    })
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('File too large')
-  })
+    it('shows the API error message when the upload is rejected', async () => {
+      server.use(
+        http.post(`${API_BASE}/images`, () =>
+          HttpResponse.json(
+            fail({ code: ERROR_CODES.VALIDATION_ERROR, message: 'File too large' }),
+            {
+              status: 422,
+            },
+          ),
+        ),
+      )
+      await screen.findByRole('img', { name: 'sunset.png' })
 
-  it('processes an image and shows the produced result', async () => {
-    const user = userEvent.setup()
-    renderAlbum()
+      await user.upload(screen.getByLabelText('Upload image'), pngFile({ name: 'huge.png' }))
 
-    await user.click(await screen.findByRole('button', { name: 'Process sunset.png' }))
-    await user.selectOptions(screen.getByLabelText('Size preset'), 'thumbnail')
-    await user.selectOptions(screen.getByLabelText('Filter'), 'grayscale')
-    await user.click(screen.getByRole('button', { name: 'Process image' }))
+      expect(await screen.findByRole('alert')).toHaveTextContent('File too large')
+    })
 
-    expect(await screen.findByRole('img', { name: 'Processed sunset.png' })).toHaveAttribute(
-      'src',
-      `${API_BASE}/files/processed/${fixtures.image.id}/grayscale-320x240.jpg?token=${encodeURIComponent(TEST_FILE_TOKEN)}`,
-    )
-  })
+    it('processes an image and shows the produced result', async () => {
+      await user.click(await screen.findByRole('button', { name: 'Process sunset.png' }))
+      await user.selectOptions(screen.getByLabelText('Size preset'), 'thumbnail')
+      await user.selectOptions(screen.getByLabelText('Filter'), 'grayscale')
+      await user.click(screen.getByRole('button', { name: 'Process image' }))
 
-  it('shows the API error message when processing fails', async () => {
-    server.use(
-      http.post(`${API_BASE}/images/process`, () =>
-        HttpResponse.json(fail(ERROR_CODES.VALIDATION_ERROR, 'width must be at least 16'), {
-          status: 422,
-        }),
-      ),
-    )
-    const user = userEvent.setup()
-    renderAlbum()
+      expect(await screen.findByRole('img', { name: 'Processed sunset.png' })).toHaveAttribute(
+        'src',
+        `${API_BASE}/files/processed/${fixtures.image.id}/grayscale-320x240.jpg?token=${encodeURIComponent(TEST_FILE_TOKEN)}`,
+      )
+    })
 
-    await user.click(await screen.findByRole('button', { name: 'Process sunset.png' }))
-    await user.click(screen.getByRole('button', { name: 'Process image' }))
+    it('shows the API error message when processing fails', async () => {
+      server.use(
+        http.post(`${API_BASE}/images/process`, () =>
+          HttpResponse.json(
+            fail({ code: ERROR_CODES.VALIDATION_ERROR, message: 'width must be at least 16' }),
+            {
+              status: 422,
+            },
+          ),
+        ),
+      )
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('width must be at least 16')
-  })
+      await user.click(await screen.findByRole('button', { name: 'Process sunset.png' }))
+      await user.click(screen.getByRole('button', { name: 'Process image' }))
 
-  it('closes the process panel again', async () => {
-    const user = userEvent.setup()
-    renderAlbum()
-    await user.click(await screen.findByRole('button', { name: 'Process sunset.png' }))
+      expect(await screen.findByRole('alert')).toHaveTextContent('width must be at least 16')
+    })
 
-    await user.click(screen.getByRole('button', { name: 'Close panel' }))
+    it('closes the process panel again', async () => {
+      await user.click(await screen.findByRole('button', { name: 'Process sunset.png' }))
 
-    expect(screen.queryByRole('button', { name: 'Process image' })).not.toBeInTheDocument()
+      await user.click(screen.getByRole('button', { name: 'Close panel' }))
+
+      expect(screen.queryByRole('button', { name: 'Process image' })).not.toBeInTheDocument()
+    })
   })
 
   it('invites the user to upload the first image of an empty album', async () => {
-    server.use(http.get(`${API_BASE}/images`, () => HttpResponse.json(ok([]))))
+    server.use(http.get(`${API_BASE}/images`, () => HttpResponse.json(ok({ data: [] }))))
 
     renderAlbum()
 
@@ -108,7 +114,9 @@ describe('AlbumDetail', () => {
   it('shows the API error message when the images cannot be loaded', async () => {
     server.use(
       http.get(`${API_BASE}/images`, () =>
-        HttpResponse.json(fail(ERROR_CODES.NOT_FOUND, 'Album not found'), { status: 404 }),
+        HttpResponse.json(fail({ code: ERROR_CODES.NOT_FOUND, message: 'Album not found' }), {
+          status: 404,
+        }),
       ),
     )
 
@@ -121,7 +129,7 @@ describe('AlbumDetail', () => {
     server.use(
       http.get(`${API_BASE}/auth/file-token`, async () => {
         await delay(50)
-        return HttpResponse.json(ok({ token: TEST_FILE_TOKEN }))
+        return HttpResponse.json(ok({ data: { token: TEST_FILE_TOKEN } }))
       }),
     )
 
@@ -141,7 +149,7 @@ describe('AlbumDetail', () => {
     server.use(
       http.get(`${API_BASE}/auth/file-token`, () => {
         fileTokenRequests += 1
-        return HttpResponse.json(ok({ token: TEST_FILE_TOKEN }))
+        return HttpResponse.json(ok({ data: { token: TEST_FILE_TOKEN } }))
       }),
     )
 

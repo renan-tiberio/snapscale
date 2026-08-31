@@ -1,26 +1,41 @@
 import { IMAGE_FILTERS } from '@snapscale/shared'
 import { fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { ProcessImagePanel } from './ProcessImagePanel'
 
 import type { ProcessImagePanelProps } from './ProcessImagePanel.types'
+import type { UserEvent } from '@testing-library/user-event'
 
 import { DEFAULT_PROCESS_OPTIONS } from '@/utils/processPresets'
 
-function renderPanel(props: Partial<ProcessImagePanelProps> = {}) {
-  return render(
-    <ProcessImagePanel
-      imageName="sunset.png"
-      onProcess={() => undefined}
-      onClose={() => undefined}
-      {...props}
-    />,
-  )
-}
+const RESULT_URL = 'http://localhost:4000/files/processed/img/abc.jpg'
 
 describe('ProcessImagePanel', () => {
+  let user: UserEvent
+  let onProcess: ProcessImagePanelProps['onProcess']
+  let onClose: ProcessImagePanelProps['onClose']
+  let onImageError: NonNullable<ProcessImagePanelProps['onImageError']>
+
+  const renderPanel = (props: Partial<ProcessImagePanelProps> = {}) =>
+    render(
+      <ProcessImagePanel
+        imageName="sunset.png"
+        onProcess={onProcess}
+        onClose={onClose}
+        onImageError={onImageError}
+        {...props}
+      />,
+    )
+
+  beforeEach(() => {
+    user = userEvent.setup()
+    onProcess = vi.fn()
+    onClose = vi.fn()
+    onImageError = vi.fn()
+  })
+
   it('names the image being processed', () => {
     renderPanel()
 
@@ -38,9 +53,7 @@ describe('ProcessImagePanel', () => {
   })
 
   it('submits the contract defaults when nothing is changed', async () => {
-    const user = userEvent.setup()
-    const onProcess = vi.fn()
-    renderPanel({ onProcess })
+    renderPanel()
 
     await user.click(screen.getByRole('button', { name: 'Process image' }))
 
@@ -48,9 +61,7 @@ describe('ProcessImagePanel', () => {
   })
 
   it('submits the size chosen from the preset picker', async () => {
-    const user = userEvent.setup()
-    const onProcess = vi.fn()
-    renderPanel({ onProcess })
+    renderPanel()
 
     await user.selectOptions(screen.getByLabelText('Size preset'), 'thumbnail')
     await user.click(screen.getByRole('button', { name: 'Process image' }))
@@ -63,9 +74,7 @@ describe('ProcessImagePanel', () => {
   })
 
   it('submits the filter and quality the user picked', async () => {
-    const user = userEvent.setup()
-    const onProcess = vi.fn()
-    renderPanel({ onProcess })
+    renderPanel()
 
     await user.selectOptions(screen.getByLabelText('Filter'), 'blur')
     await user.clear(screen.getByLabelText('Quality'))
@@ -80,9 +89,7 @@ describe('ProcessImagePanel', () => {
   })
 
   it('submits a custom width and height', async () => {
-    const user = userEvent.setup()
-    const onProcess = vi.fn()
-    renderPanel({ onProcess })
+    renderPanel()
 
     await user.clear(screen.getByLabelText('Width'))
     await user.type(screen.getByLabelText('Width'), '640')
@@ -98,9 +105,7 @@ describe('ProcessImagePanel', () => {
   })
 
   it('does not submit again while processing is running', async () => {
-    const user = userEvent.setup()
-    const onProcess = vi.fn()
-    renderPanel({ onProcess, isProcessing: true })
+    renderPanel({ isProcessing: true })
 
     await user.click(screen.getByRole('button', { name: 'Processing…' }))
 
@@ -108,11 +113,11 @@ describe('ProcessImagePanel', () => {
   })
 
   it('shows the processed result once it is available', () => {
-    renderPanel({ resultUrl: 'http://localhost:4000/files/processed/img/abc.jpg' })
+    renderPanel({ resultUrl: RESULT_URL })
 
     expect(screen.getByRole('img', { name: 'Processed sunset.png' })).toHaveAttribute(
       'src',
-      'http://localhost:4000/files/processed/img/abc.jpg',
+      RESULT_URL,
     )
   })
 
@@ -129,9 +134,7 @@ describe('ProcessImagePanel', () => {
   })
 
   it('closes when the user dismisses the panel', async () => {
-    const user = userEvent.setup()
-    const onClose = vi.fn()
-    renderPanel({ onClose })
+    renderPanel()
 
     await user.click(screen.getByRole('button', { name: 'Close panel' }))
 
@@ -139,9 +142,7 @@ describe('ProcessImagePanel', () => {
   })
 
   it('shows a retry affordance and notifies the caller when the processed image fails to load', async () => {
-    const user = userEvent.setup()
-    const onImageError = vi.fn()
-    renderPanel({ resultUrl: 'http://localhost:4000/files/processed/img/abc.jpg', onImageError })
+    renderPanel({ resultUrl: RESULT_URL })
 
     fireEvent.error(screen.getByRole('img', { name: 'Processed sunset.png' }))
 

@@ -4,15 +4,15 @@
 # points at the host-mapped ports for local `pnpm dev`.
 x-api-env: &api-env
   PORT: "4000"
-  DATABASE_URL: postgres://snapscale:snapscale@postgres:5432/snapscale
-  SMTP_HOST: mailhog
+  DATABASE_URL: "postgres://snapscale:snapscale@postgres:5432/snapscale"
+  SMTP_HOST: "mailhog"
   SMTP_PORT: "1025"
-  JWT_SECRET: change-me-in-every-environment
+  JWT_SECRET: "change-me-in-every-environment"
   OTP_TTL_SECONDS: "600"
-  UPLOAD_DIR: ./data/uploads
+  UPLOAD_DIR: "./data/uploads"
   # Browser origin allowed to call the api — the browser talks to the
   # host-mapped web port, never a compose-internal hostname.
-  WEB_ORIGIN: http://localhost:5173
+  WEB_ORIGIN: "http://localhost:5173"
 
 services:
   postgres:
@@ -20,9 +20,9 @@ services:
     ports:
       - "5433:5432"
     environment:
-      POSTGRES_USER: snapscale
-      POSTGRES_PASSWORD: snapscale
-      POSTGRES_DB: snapscale
+      POSTGRES_USER: "snapscale"
+      POSTGRES_PASSWORD: "snapscale"
+      POSTGRES_DB: "snapscale"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -94,7 +94,7 @@ services:
         # compose-internal `api:4000` hostname, because this URL is read
         # by JS running in the user's browser, outside the compose
         # network, not by another container.
-        VITE_API_URL: http://localhost:4000
+        VITE_API_URL: "http://localhost:4000"
     ports:
       - "5173:5173"
     depends_on:

@@ -1,6 +1,8 @@
 import type { Image } from '@snapscale/shared'
 
-export interface ImageCardProps {
+export type ImageCardProcessRequest = { imageId: string }
+
+export type ImageCardProps = {
   image: Image
   /**
    * Absolute URL of the original file, served by the api — `null` while
@@ -9,7 +11,7 @@ export interface ImageCardProps {
    * would 401.
    */
   src: string | null
-  onProcess: (imageId: string) => void
+  onProcess: (request: ImageCardProcessRequest) => void
   isSelected?: boolean
   /**
    * Called when the `<img>` fails to load (e.g. a 401 from an expired

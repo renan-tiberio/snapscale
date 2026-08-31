@@ -1,6 +1,6 @@
 import type { CreateAlbumInput } from '@snapscale/shared'
 
-export interface CreateAlbumFormProps {
+export type CreateAlbumFormProps = {
   onCreate: (input: CreateAlbumInput) => void
   isCreating?: boolean
   errorMessage?: string | null

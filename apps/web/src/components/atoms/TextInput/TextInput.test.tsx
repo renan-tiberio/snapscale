@@ -5,9 +5,9 @@ import { describe, expect, it } from 'vitest'
 
 import { TextInput } from './TextInput'
 
-function ControlledTextInput() {
+const ControlledTextInput = () => {
   const [value, setValue] = useState('')
-  return <TextInput label="Email" value={value} onChange={setValue} />
+  return <TextInput label="Email" value={value} onChange={({ value: next }) => setValue(next)} />
 }
 
 describe('TextInput', () => {

@@ -1,7 +1,9 @@
-export interface OtpCodeInputProps {
-  /** Current code — always digits only, at most 6 characters. */
+export type OtpCodeInputChange = { value: string }
+
+export type OtpCodeInputProps = {
+  /** Current code — always digits only, at most `OTP_CODE_LENGTH` characters. */
   value: string
-  onChange: (value: string) => void
+  onChange: (change: OtpCodeInputChange) => void
   label?: string
   disabled?: boolean
 }

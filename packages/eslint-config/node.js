@@ -11,6 +11,24 @@ export const nodeConfig = [
       'no-console': ['error', { allow: ['error'] }],
     },
   },
+  {
+    // docs/06-code-standards.md §3 scopes named parameters to signatures we own.
+    // Fastify dictates these: `(request, reply)` for handlers, `(error, request,
+    // reply)` for the error handler, `(app, options)` for plugins. Changing them
+    // is not an option, so the rule is lifted exactly where the framework decides
+    // the shape — never for our own functions living in the same folders.
+    files: [
+      '**/routes/**/*.ts',
+      '**/plugins/**/*.ts',
+      '**/app.ts',
+      '**/app/*.ts',
+      '**/error-handler.ts',
+      '**/error-handler/*.ts',
+    ],
+    rules: {
+      '@typescript-eslint/max-params': ['error', { max: 3 }],
+    },
+  },
 ]
 
 export default nodeConfig

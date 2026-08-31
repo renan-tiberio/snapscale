@@ -3,12 +3,12 @@ import { useId } from 'react'
 
 import type { UploadButtonProps } from './UploadButton.types'
 
-export function UploadButton({
+export const UploadButton = ({
   onFileSelected,
   label = 'Upload image',
   accept = ALLOWED_IMAGE_MIME_TYPES.join(','),
   isUploading = false,
-}: UploadButtonProps) {
+}: UploadButtonProps) => {
   const inputId = useId()
 
   return (
@@ -25,10 +25,10 @@ export function UploadButton({
           const file = event.target.files?.[0]
 
           if (file) {
-            onFileSelected(file)
+            onFileSelected({ file })
           }
         }}
-        className="text-sm file:mr-3 file:rounded-md file:border-0 file:bg-brand-600 file:px-4 file:py-2 file:text-sm file:font-medium file:text-white hover:file:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-60"
+        className="file:bg-brand-600 hover:file:bg-brand-700 text-sm file:mr-3 file:rounded-md file:border-0 file:px-4 file:py-2 file:text-sm file:font-medium file:text-white disabled:cursor-not-allowed disabled:opacity-60"
       />
       {isUploading ? <span className="text-sm text-slate-500">Uploading…</span> : null}
     </div>

@@ -1,7 +1,7 @@
 /**
  * The three origins the journey talks to, each overridable by environment
- * variable and each defaulting to the local phase-1 stack documented in
- * `README.md` ("Where each service lives").
+ * variable and each defaulting to the local stack documented in `README.md`
+ * ("Where each service lives").
  *
  * Read by `playwright.config.ts` (for `use.baseURL`) and by the specs, so the
  * config and the tests can never disagree about where the stack is.

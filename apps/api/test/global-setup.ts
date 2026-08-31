@@ -5,27 +5,24 @@ import { startMailhogContainer, type StartedMailhog } from './mailhog-container.
 import type { GlobalSetupContext } from 'vitest/node'
 
 /**
- * One throwaway Postgres per test run — never the compose instance on 5433
- * (docs/05-decision-log.md decision 11). Testcontainers picks a random host
- * port, so nothing here can collide with a developer's running stack.
+ * One throwaway Postgres per run — never the compose instance on 5433
+ * (docs/05-decision-log.md decision 11); testcontainers picks a random host
+ * port so this never collides with a developer's running stack. Each test
+ * file creates its own database inside it (`test/db.ts`) for per-file
+ * isolation without paying container startup per file.
  *
- * Each test file then creates its **own** database inside this container
- * (`test/db.ts`), which gives the isolation decision 11 asks for without
- * paying container startup per file.
- *
- * FIX-E: MailHog is started here too, for the same reason — see the comment
- * on `startMailhogContainer` in `./mailhog-container.ts` for why running it
- * from a test file's `beforeAll` made it flaky. `connectToMailhog()` (in
- * `./mailhog.ts`) is what test files use to reach the container this starts;
- * they purge the inbox between tests for isolation instead of getting their
- * own container. `./mailhog-container.ts` is a separate module from
- * `./mailhog.ts` specifically so this file never transitively imports
- * `vitest` — `globalSetup` runs in a separate context where doing so breaks
- * vitest's own worker state.
+ * MailHog starts here too, for the contention reason documented in
+ * `./mailhog-container.ts`. This file imports that module, never
+ * `./mailhog.ts` — `globalSetup` runs in a context where importing `vitest`
+ * corrupts vitest's own worker state; `./mailhog.ts` is what test files use
+ * instead, via `inject()`.
  */
 const POSTGRES_IMAGE = 'postgres:16-alpine'
 
 declare module 'vitest' {
+  // `type` cannot participate in declaration merging — vitest's `ProvidedContext`
+  // can only be augmented via `interface` (docs/06-code-standards.md §2).
+  // eslint-disable-next-line @typescript-eslint/consistent-type-definitions
   interface ProvidedContext {
     /** Admin connection URI of the throwaway container (points at its default database). */
     postgresUri: string
@@ -35,7 +32,7 @@ declare module 'vitest' {
 let postgres: StartedPostgreSqlContainer | undefined
 let mailhog: StartedMailhog | undefined
 
-export async function setup({ provide }: GlobalSetupContext): Promise<void> {
+export const setup = async ({ provide }: GlobalSetupContext): Promise<void> => {
   const [startedPostgres, startedMailhog] = await Promise.all([
     new PostgreSqlContainer(POSTGRES_IMAGE).start(),
     startMailhogContainer(),
@@ -48,7 +45,7 @@ export async function setup({ provide }: GlobalSetupContext): Promise<void> {
   provide('mailhogConnection', mailhog.connection)
 }
 
-export async function teardown(): Promise<void> {
+export const teardown = async (): Promise<void> => {
   await Promise.all([postgres?.stop(), mailhog?.stop()])
   postgres = undefined
   mailhog = undefined

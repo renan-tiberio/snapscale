@@ -14,7 +14,7 @@ const album = {
   updatedAt: '2026-08-01T10:00:00.000Z',
 }
 
-function withRouter(children: ReactNode) {
+const withRouter = ({ children }: { children: ReactNode }) => {
   const router = createMemoryRouter([{ path: '/', element: children }])
   return <RouterProvider router={router} />
 }
@@ -27,7 +27,7 @@ const meta: Meta<typeof AlbumCard> = {
     href: '/albums/aaaaaaaa-1111-4111-8111-111111111111',
     onDelete: () => undefined,
   },
-  decorators: [(Story) => withRouter(<Story />)],
+  decorators: [(Story) => withRouter({ children: <Story /> })],
 }
 
 export default meta

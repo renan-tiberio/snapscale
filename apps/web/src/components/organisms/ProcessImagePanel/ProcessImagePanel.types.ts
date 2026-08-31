@@ -1,6 +1,6 @@
 import type { ImageProcessOptions } from '@snapscale/shared'
 
-export interface ProcessImagePanelProps {
+export type ProcessImagePanelProps = {
   /** Filename of the image being processed — shown in the panel heading. */
   imageName: string
   onProcess: (options: ImageProcessOptions) => void

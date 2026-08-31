@@ -14,9 +14,9 @@ export default meta
 type Story = StoryObj<typeof TextInput>
 
 export const Default: Story = {
-  render: function Render(args) {
+  render: (args) => {
     const [value, setValue] = useState('')
-    return <TextInput {...args} value={value} onChange={setValue} />
+    return <TextInput {...args} value={value} onChange={({ value: next }) => setValue(next)} />
   },
   args: {
     label: 'Email',

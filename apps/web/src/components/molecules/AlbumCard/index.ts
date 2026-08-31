@@ -1,2 +1,2 @@
 export { AlbumCard } from './AlbumCard'
-export type { AlbumCardProps } from './AlbumCard.types'
+export type { AlbumCardDeleteRequest, AlbumCardProps } from './AlbumCard.types'

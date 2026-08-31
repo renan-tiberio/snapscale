@@ -1,33 +1,46 @@
 import { ALLOWED_IMAGE_MIME_TYPES } from '@snapscale/shared'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { UploadButton } from './UploadButton'
 
-function pngFile(name = 'beach.png') {
-  return new File(['fake-png-bytes'], name, { type: 'image/png' })
-}
+import type { UploadButtonProps } from './UploadButton.types'
+import type { UserEvent } from '@testing-library/user-event'
+
+const pngFile = ({ name = 'beach.png' }: { name?: string } = {}) =>
+  new File(['fake-png-bytes'], name, { type: 'image/png' })
 
 describe('UploadButton', () => {
+  let user: UserEvent
+  let onFileSelected: UploadButtonProps['onFileSelected']
+
+  const renderUploadButton = (props: Partial<UploadButtonProps> = {}) =>
+    render(<UploadButton onFileSelected={onFileSelected} {...props} />)
+
+  beforeEach(() => {
+    user = userEvent.setup()
+    onFileSelected = vi.fn()
+  })
+
   it('renders an accessible file field', () => {
-    render(<UploadButton onFileSelected={() => undefined} />)
+    renderUploadButton()
 
     expect(screen.getByLabelText('Upload image')).toBeInTheDocument()
   })
 
   it('reports the file the user picked', async () => {
-    const user = userEvent.setup()
-    const onFileSelected = vi.fn()
-    render(<UploadButton onFileSelected={onFileSelected} />)
+    renderUploadButton()
 
     await user.upload(screen.getByLabelText('Upload image'), pngFile())
 
-    expect(onFileSelected).toHaveBeenCalledWith(expect.objectContaining({ name: 'beach.png' }))
+    expect(onFileSelected).toHaveBeenCalledWith({
+      file: expect.objectContaining({ name: 'beach.png' }),
+    })
   })
 
   it('only accepts the shared image mime allowlist', () => {
-    render(<UploadButton onFileSelected={() => undefined} />)
+    renderUploadButton()
 
     expect(screen.getByLabelText('Upload image')).toHaveAttribute(
       'accept',
@@ -36,9 +49,7 @@ describe('UploadButton', () => {
   })
 
   it('refuses new files while an upload is in flight', async () => {
-    const user = userEvent.setup()
-    const onFileSelected = vi.fn()
-    render(<UploadButton onFileSelected={onFileSelected} isUploading />)
+    renderUploadButton({ isUploading: true })
 
     await user.upload(screen.getByLabelText('Upload image'), pngFile())
 
@@ -46,13 +57,13 @@ describe('UploadButton', () => {
   })
 
   it('tells the user an upload is running', () => {
-    render(<UploadButton onFileSelected={() => undefined} isUploading />)
+    renderUploadButton({ isUploading: true })
 
     expect(screen.getByText('Uploading…')).toBeInTheDocument()
   })
 
   it('uses a caller-provided label', () => {
-    render(<UploadButton onFileSelected={() => undefined} label="Add a photo" />)
+    renderUploadButton({ label: 'Add a photo' })
 
     expect(screen.getByLabelText('Add a photo')).toBeInTheDocument()
   })

@@ -1,11 +1,9 @@
 import { index, integer, pgTable, text, timestamp, unique, uuid } from 'drizzle-orm/pg-core'
 
 /**
- * Phase-1 api database — `docs/03-technical-design.md` §6.
- *
- * Every table owns its data outright: foreign keys stay *inside* this database
- * (cross-service references are ids only, never FKs — same doc, processor DB
- * section). Deletes cascade downwards (user → albums → images → processed
+ * Api database — `docs/03-technical-design.md` §6. Foreign keys stay
+ * *inside* this database (cross-service references are ids only, never
+ * FKs). Deletes cascade downwards (user → albums → images → processed
  * images) so removing an aggregate root can never leave orphan rows behind.
  */
 export const users = pgTable('users', {
@@ -78,9 +76,9 @@ export const images = pgTable(
 )
 
 /**
- * Result of one `POST /images/process` run. `params_hash` is the sha256 of the
- * canonical params JSON (docs/03 §7); the unique pair (image, hash) is what
- * makes phase 8's cache lookup a single indexed read and stops the same
+ * Result of one `POST /images/process` run. `params_hash` is the sha256 of
+ * the canonical params JSON (docs/03 §7); the unique pair (image, hash)
+ * makes the cache lookup a single indexed read and stops the same
  * transformation being stored twice.
  */
 export const processedImages = pgTable(

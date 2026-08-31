@@ -8,8 +8,8 @@ export default defineConfig({
       provider: 'v8',
       reporter: ['text', 'html'],
       include: ['src/**/*.ts'],
-      // index.ts is a pure re-export barrel — no behavior of its own to cover.
-      exclude: ['src/**/*.test.ts', 'src/index.ts'],
+      // Every index.ts is a pure re-export barrel — no behavior of its own to cover.
+      exclude: ['src/**/*.test.ts', 'src/**/index.ts'],
       thresholds: {
         lines: 80,
         branches: 80,

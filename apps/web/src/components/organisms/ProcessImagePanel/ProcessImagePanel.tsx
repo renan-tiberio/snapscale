@@ -1,5 +1,12 @@
-import { IMAGE_FILTERS } from '@snapscale/shared'
+import {
+  IMAGE_FILTERS,
+  MAX_PROCESS_DIMENSION_PX,
+  MAX_PROCESS_QUALITY,
+  MIN_PROCESS_DIMENSION_PX,
+  MIN_PROCESS_QUALITY,
+} from '@snapscale/shared'
 import { useId, useState } from 'react'
+import { tv } from 'tailwind-variants'
 
 import type { ProcessImagePanelProps } from './ProcessImagePanel.types'
 import type { ImageFilter } from '@snapscale/shared'
@@ -9,10 +16,19 @@ import { Button } from '@/components/atoms/Button'
 import { DEFAULT_PROCESS_OPTIONS, findSizePreset, SIZE_PRESETS } from '@/utils/processPresets'
 
 const CUSTOM_PRESET_ID = 'custom'
-const FIELD_CLASSES =
-  'rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none'
+const field = tv({
+  base: 'rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none',
+})
 
-export function ProcessImagePanel({
+/**
+ * `<select>` only ever emits a value from its own `<option>`s, all sourced
+ * from `IMAGE_FILTERS`. Positional: a type predicate can only narrow a
+ * parameter it names directly.
+ */
+const isImageFilter = (value: string): value is ImageFilter =>
+  IMAGE_FILTERS.some((filter) => filter === value)
+
+export const ProcessImagePanel = ({
   imageName,
   onProcess,
   onClose,
@@ -20,7 +36,7 @@ export function ProcessImagePanel({
   errorMessage = null,
   resultUrl = null,
   onImageError,
-}: ProcessImagePanelProps) {
+}: ProcessImagePanelProps) => {
   const presetId = useId()
   const widthId = useId()
   const heightId = useId()
@@ -37,9 +53,9 @@ export function ProcessImagePanel({
   const [erroredResultUrl, setErroredResultUrl] = useState<string | null>(null)
   const hasResultError = resultUrl !== null && erroredResultUrl === resultUrl
 
-  const selectedPreset = findSizePreset(Number(width), Number(height))
+  const selectedPreset = findSizePreset({ width: Number(width), height: Number(height) })
 
-  function handlePresetChange(nextPresetId: string) {
+  const handlePresetChange = ({ nextPresetId }: { nextPresetId: string }) => {
     const preset = SIZE_PRESETS.find((candidate) => candidate.id === nextPresetId)
 
     if (!preset) {
@@ -50,17 +66,25 @@ export function ProcessImagePanel({
     setHeight(String(preset.height))
   }
 
-  function handleResultError() {
+  const handleResultError = () => {
     setErroredResultUrl(resultUrl)
     onImageError?.()
   }
 
-  function handleResultRetry() {
+  const handleResultRetry = () => {
     setErroredResultUrl(null)
     onImageError?.()
   }
 
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  const handleFilterChange = ({ value }: { value: string }) => {
+    if (!isImageFilter(value)) {
+      return
+    }
+
+    setFilter(value)
+  }
+
+  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
 
     if (isProcessing) {
@@ -75,20 +99,26 @@ export function ProcessImagePanel({
     })
   }
 
-  let resultContent: ReactNode = null
+  const renderResult = (): ReactNode => {
+    if (resultUrl === null) {
+      return null
+    }
 
-  if (resultUrl !== null) {
-    resultContent = hasResultError ? (
-      <div
-        role="alert"
-        className="flex flex-col items-center gap-2 rounded-md border border-slate-200 p-4 text-sm text-slate-600"
-      >
-        <span>Processed image failed to load</span>
-        <Button variant="secondary" onClick={handleResultRetry}>
-          Retry
-        </Button>
-      </div>
-    ) : (
+    if (hasResultError) {
+      return (
+        <div
+          role="alert"
+          className="flex flex-col items-center gap-2 rounded-md border border-slate-200 p-4 text-sm text-slate-600"
+        >
+          <span>Processed image failed to load</span>
+          <Button variant="secondary" onClick={handleResultRetry}>
+            Retry
+          </Button>
+        </div>
+      )
+    }
+
+    return (
       <img
         src={resultUrl}
         alt={`Processed ${imageName}`}
@@ -115,8 +145,8 @@ export function ProcessImagePanel({
           <select
             id={presetId}
             value={selectedPreset?.id ?? CUSTOM_PRESET_ID}
-            onChange={(event) => handlePresetChange(event.target.value)}
-            className={FIELD_CLASSES}
+            onChange={(event) => handlePresetChange({ nextPresetId: event.target.value })}
+            className={field()}
           >
             <option value={CUSTOM_PRESET_ID}>Custom size</option>
             {SIZE_PRESETS.map((preset) => (
@@ -135,11 +165,11 @@ export function ProcessImagePanel({
             <input
               id={widthId}
               type="number"
-              min={16}
-              max={4096}
+              min={MIN_PROCESS_DIMENSION_PX}
+              max={MAX_PROCESS_DIMENSION_PX}
               value={width}
               onChange={(event) => setWidth(event.target.value)}
-              className={FIELD_CLASSES}
+              className={field()}
             />
           </div>
           <div className="flex flex-col gap-1">
@@ -149,11 +179,11 @@ export function ProcessImagePanel({
             <input
               id={heightId}
               type="number"
-              min={16}
-              max={4096}
+              min={MIN_PROCESS_DIMENSION_PX}
+              max={MAX_PROCESS_DIMENSION_PX}
               value={height}
               onChange={(event) => setHeight(event.target.value)}
-              className={FIELD_CLASSES}
+              className={field()}
             />
           </div>
         </div>
@@ -166,8 +196,8 @@ export function ProcessImagePanel({
             <select
               id={filterId}
               value={filter}
-              onChange={(event) => setFilter(event.target.value as ImageFilter)}
-              className={FIELD_CLASSES}
+              onChange={(event) => handleFilterChange({ value: event.target.value })}
+              className={field()}
             >
               {IMAGE_FILTERS.map((imageFilter) => (
                 <option key={imageFilter} value={imageFilter}>
@@ -183,11 +213,11 @@ export function ProcessImagePanel({
             <input
               id={qualityId}
               type="number"
-              min={1}
-              max={100}
+              min={MIN_PROCESS_QUALITY}
+              max={MAX_PROCESS_QUALITY}
               value={quality}
               onChange={(event) => setQuality(event.target.value)}
-              className={FIELD_CLASSES}
+              className={field()}
             />
           </div>
         </div>
@@ -203,7 +233,7 @@ export function ProcessImagePanel({
         </p>
       )}
 
-      {resultContent}
+      {renderResult()}
     </section>
   )
 }

@@ -6,12 +6,16 @@
   "scripts": {
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
-    "test:e2e:report": "playwright show-report playwright-report"
+    "test:e2e:report": "playwright show-report playwright-report",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "devDependencies": {
     "@playwright/test": "1.62.1",
+    "@snapscale/eslint-config": "workspace:*",
     "@snapscale/tsconfig": "workspace:*",
     "@types/node": "22.10.2",
+    "eslint": "9.39.5",
     "typescript": "5.9.3"
   }
 }

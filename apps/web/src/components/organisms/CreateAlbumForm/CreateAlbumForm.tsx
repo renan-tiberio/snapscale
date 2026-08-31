@@ -6,18 +6,18 @@ import type { FormEvent } from 'react'
 import { Button } from '@/components/atoms/Button'
 import { TextInput } from '@/components/atoms/TextInput'
 
-export function CreateAlbumForm({
+export const CreateAlbumForm = ({
   onCreate,
   isCreating = false,
   errorMessage = null,
-}: CreateAlbumFormProps) {
+}: CreateAlbumFormProps) => {
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
 
   const trimmedName = name.trim()
   const canSubmit = trimmedName !== '' && !isCreating
 
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
 
     if (!canSubmit) {
@@ -39,11 +39,16 @@ export function CreateAlbumForm({
       onSubmit={handleSubmit}
       className="flex flex-col gap-3 rounded-lg border border-slate-200 bg-white p-4 shadow-sm sm:flex-row sm:items-end"
     >
-      <TextInput label="Album name" value={name} onChange={setName} placeholder="Holidays" />
+      <TextInput
+        label="Album name"
+        value={name}
+        onChange={({ value }) => setName(value)}
+        placeholder="Holidays"
+      />
       <TextInput
         label="Description"
         value={description}
-        onChange={setDescription}
+        onChange={({ value }) => setDescription(value)}
         placeholder="Optional"
       />
       <Button type="submit" disabled={!canSubmit}>

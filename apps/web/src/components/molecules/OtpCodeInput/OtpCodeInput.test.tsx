@@ -1,16 +1,30 @@
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { useState } from 'react'
-import { describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it } from 'vitest'
 
 import { OtpCodeInput } from './OtpCodeInput'
 
-function ControlledOtpCodeInput({ disabled = false }: { disabled?: boolean }) {
+import type { UserEvent } from '@testing-library/user-event'
+
+const ControlledOtpCodeInput = ({ disabled = false }: { disabled?: boolean }) => {
   const [value, setValue] = useState('')
-  return <OtpCodeInput value={value} onChange={setValue} disabled={disabled} />
+  return (
+    <OtpCodeInput
+      value={value}
+      onChange={({ value: next }) => setValue(next)}
+      disabled={disabled}
+    />
+  )
 }
 
 describe('OtpCodeInput', () => {
+  let user: UserEvent
+
+  beforeEach(() => {
+    user = userEvent.setup()
+  })
+
   it('renders an accessible field labelled as the verification code', () => {
     render(<OtpCodeInput value="" onChange={() => undefined} />)
 
@@ -18,7 +32,6 @@ describe('OtpCodeInput', () => {
   })
 
   it('accepts the six digits the user types', async () => {
-    const user = userEvent.setup()
     render(<ControlledOtpCodeInput />)
 
     await user.type(screen.getByLabelText('Verification code'), '123456')
@@ -27,7 +40,6 @@ describe('OtpCodeInput', () => {
   })
 
   it('ignores non-digit characters', async () => {
-    const user = userEvent.setup()
     render(<ControlledOtpCodeInput />)
 
     await user.type(screen.getByLabelText('Verification code'), '12ab34')
@@ -36,7 +48,6 @@ describe('OtpCodeInput', () => {
   })
 
   it('stops accepting input after six digits', async () => {
-    const user = userEvent.setup()
     render(<ControlledOtpCodeInput />)
 
     await user.type(screen.getByLabelText('Verification code'), '1234567890')
@@ -45,7 +56,6 @@ describe('OtpCodeInput', () => {
   })
 
   it('does not accept input while disabled', async () => {
-    const user = userEvent.setup()
     render(<ControlledOtpCodeInput disabled />)
 
     await user.type(screen.getByLabelText('Verification code'), '123456')
