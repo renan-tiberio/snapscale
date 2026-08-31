@@ -1,0 +1,9 @@
+set -e
+
+# `build` first: nothing else in the gate compiles the apps themselves — `typecheck` only
+# pulls the packages in through its `^build` edge — so this is the only check that a push
+# still emits.
+pnpm exec turbo run build
+
+# Full gate. The api integration suite needs Docker running.
+pnpm exec turbo run lint typecheck test test:coverage

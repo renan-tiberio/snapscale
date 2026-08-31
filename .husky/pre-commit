@@ -1,0 +1,36 @@
+set -e
+
+# Staged files only: eslint + prettier through each package's own .lintstagedrc.json.
+pnpm exec lint-staged
+
+# Whole-tree, because a staged change can break a package whose files are not staged.
+pnpm run typecheck
+
+# A root config change can invalidate anything, so it earns the full suite.
+if git diff --cached --name-only |
+	grep -qE '^(package\.json|pnpm-lock\.yaml|pnpm-workspace\.yaml|turbo\.json)$'; then
+	echo "pre-commit: root config staged — running every suite"
+	pnpm exec turbo run test
+	exit 0
+fi
+
+# Otherwise scope the suites to the packages the staged files live in, PLUS everything
+# that depends on them: editing packages/shared has to run api's and web's suites too.
+# `...pkg` is the dependents form; `pkg...` is dependencies, the wrong direction here.
+# Verified with `turbo run test --filter=... --dry=json`.
+# e2e is excluded on purpose: it has no `test` script, only `test:e2e`, which needs the
+# whole compose stack. Its files are still linted and typechecked above.
+FILTERS=$(git diff --cached --name-only --diff-filter=ACMR |
+	awk -F/ '$1 == "apps" || $1 == "packages" { print "--filter=...@snapscale/" $2 }' |
+	sort -u |
+	tr '\n' ' ')
+
+if [ -z "$FILTERS" ]; then
+	echo "pre-commit: no workspace package touched — skipping suites"
+	exit 0
+fi
+
+echo "pre-commit: running suites for $FILTERS"
+# Word splitting is what builds the argument list here.
+# shellcheck disable=SC2086
+pnpm exec turbo run test $FILTERS
