@@ -10,14 +10,15 @@ Build an image-gallery monolith with a deliberately CPU-heavy route, prove with 
 which route degrades the system, extract it into a real microservice, then autoscale it
 on local Kubernetes — one branch per phase, TDD throughout. Architecture rationale lives
 in `02-architecture.md`; stack choices and conventions live in `03-technical-design.md`.
-This document is the task breakdown only.
+This document is the task breakdown only. House style — how every line is written —
+is `06-code-standards.md`, and it is binding.
 
 ## Patterns to Mirror
 
 Greenfield repository — no existing code to mirror. All conventions (naming, error
 handling, logging, data access, test layout) are defined in `03-technical-design.md`
-and become the reference for every subsequent phase. Phase 1 establishes them; later
-phases mirror phase 1.
+and `06-code-standards.md`, and become the reference for every subsequent phase.
+Phase 1 establishes them; later phases mirror phase 1.
 
 ## Global Conventions
 

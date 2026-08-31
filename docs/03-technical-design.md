@@ -3,6 +3,9 @@
 > How each piece is built. Derives from `00-initial-idea.md` (vision) and `01-prd.md`
 > (requirements). Component relationships and topology live in `02-architecture.md`;
 > phase-by-phase tasks live in `04-implementation-plan.md`.
+> **How the code is written — arrow functions, `type` over `interface`, named
+> parameters, immutability, test file layout — is `06-code-standards.md`, and it is
+> binding on this phase and every phase after it.**
 > Choices already made at kickoff are documented as-is; choices this document adds are
 > listed in [Decisions introduced here](#decisions-introduced-here). Genuinely open
 > choices are marked **decide at phase N**, matching the PRD's Open Questions.
