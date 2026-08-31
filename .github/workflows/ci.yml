@@ -1,0 +1,79 @@
+name: CI
+
+# Every push on every branch, plus every pull request. There are no merges in this repo
+# yet — one branch per phase, merged forward by hand — but the PR trigger is configured
+# so a merge is gated the day one happens.
+on:
+  push:
+    branches: ['**']
+  pull_request:
+    branches: ['**']
+
+# A second push to the same branch makes the first run's answer worthless.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  gate:
+    name: lint · typecheck · build · test · coverage
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # pnpm before Node, so setup-node can find the store to cache. The version comes
+      # from package.json#packageManager, so CI cannot drift from local.
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: package.json
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # turbo's local cache, keyed on the lockfile plus the commit so a run can restore a
+      # sibling commit's cache and recompute only what changed.
+      - name: Restore turbo cache
+        uses: actions/cache@v4
+        with:
+          path: .turbo
+          key: turbo-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-${{ github.sha }}
+          restore-keys: |
+            turbo-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-
+            turbo-${{ runner.os }}-
+
+      - run: pnpm exec turbo run lint
+
+      - run: pnpm exec turbo run typecheck
+
+      # Separate from the suites on purpose: `test` only pulls each package's UPSTREAM
+      # builds in through its `^build` edge, so this is the only step that proves apps/api
+      # and apps/web themselves compile and emit — `typecheck` runs --noEmit and cannot.
+      - run: pnpm exec turbo run build
+
+      # apps/api's integration tests bring up Postgres and MailHog through Testcontainers,
+      # which needs a working Docker daemon. ubuntu-latest ships one already running; this
+      # step fails loudly if that ever stops being true, instead of the suites failing with
+      # a confusing connection error.
+      - name: Verify Docker is available for Testcontainers
+        run: docker info --format 'server {{.ServerVersion}}'
+
+      - run: pnpm exec turbo run test
+
+      # Thresholds live in each package's vitest.config.ts (80% lines) and fail the task,
+      # so a passing exit code here IS the coverage gate.
+      - run: pnpm exec turbo run test:coverage
+
+      - name: Upload coverage reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: |
+            apps/*/coverage
+            packages/*/coverage
+          if-no-files-found: warn
+          retention-days: 7
