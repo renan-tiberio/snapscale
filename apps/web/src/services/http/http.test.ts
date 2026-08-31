@@ -114,9 +114,9 @@ describe('http', () => {
     ['a bare string', 'just-a-string'],
     ['null', null],
     ['an unrelated object shape', { weird: 1 }],
-    // eslint-disable-next-line @typescript-eslint/max-params -- vitest's it.each destructures each tuple positionally into the case callback
   ])(
     'falls back to a generic INTERNAL ApiError without throwing for garbage payload: %s',
+    // eslint-disable-next-line @typescript-eslint/max-params -- vitest's it.each destructures each tuple positionally into the case callback
     async (_label, payload) => {
       server.use(
         mswHttp.get(`${API_BASE}/albums`, () => HttpResponse.json(payload, { status: 500 })),
