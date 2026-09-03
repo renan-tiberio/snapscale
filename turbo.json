@@ -26,6 +26,9 @@
       "dependsOn": ["build"],
       "cache": false
     },
+    "//#docs:build": {
+      "cache": false
+    },
     "dev": {
       "cache": false,
       "persistent": true
