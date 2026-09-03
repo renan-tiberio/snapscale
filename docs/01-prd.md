@@ -65,7 +65,7 @@ system. This alone tests the core hypothesis: "can I make the invisible visible?
 
 | # | Milestone | Outcome | Status | Plan |
 |---|---|---|---|---|
-| 1 | Monolith (`phase-1-monolith`) | Gallery works end-to-end locally: OTP login via MailHog, upload, albums, heavy process route | complete — gate passed 2026-08-23; evidence in `evidence/phase-1/verification.md` | `04-implementation-plan.md` |
+| 1 | Monolith (`phase-1-monolith`) | Gallery works end-to-end locally: OTP login via MailHog, upload, albums, heavy process route | complete — re-verified 2026-09-02 at `29727cc` after the house-style retrofit; journey 2/2 green under real `docker compose`; evidence in `evidence/phase-1/` | `04-implementation-plan.md` |
 | 2 | Observability (`phase-2-observability`) | Grafana dashboard proves `/images/process` is the culprit under k6 load | pending | `04-implementation-plan.md` |
 | 3 | Extraction (`phase-3-microservice`) | `image-processor` runs as a true microservice (own DB, container, lifecycle); Jaeger shows cross-service traces | pending | `04-implementation-plan.md` |
 | 4 | Autoscaling (`phase-4-autoscaling`) | k3d + HPA scale the processor with load, observed live | pending | `04-implementation-plan.md` |

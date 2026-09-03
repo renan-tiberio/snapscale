@@ -52,6 +52,8 @@ Phase 1 establishes them; later phases mirror phase 1.
 - [ ] Phase report appended to the phase's docs (what was proven, what surprised).
 - [ ] Lint + typecheck green (`turbo run lint typecheck`).
 
+That phase report lives at `docs/phases/phase-<N>.md` — format and rules in `docs/phases/README.md`.
+
 ### Host port map (avoids the user's protected ports 3000/3001/5432)
 
 | Service | Host port |
@@ -471,9 +473,11 @@ kubectl get hpa -w          # during load experiments
 - [ ] Open questions from the PRD resolved by ADRs at their phase start, never earlier.
 
 ---
-*Status: Phase 1 implemented — approved and executed (all 12 tasks landed on
-`phase-1-monolith`). Verification is in progress: the coverage/lint/typecheck gate and
-the Playwright E2E journey are the open item before the phase is called done. Exit-
-criterion evidence lands at `docs/evidence/phase-1/` when that gate is green; this
-status line updates to "complete" only then. Phases 2–9 remain DRAFT, pending approval
-at their own kickoff per the branch-per-phase workflow above.*
+*Status: Phase 1 complete — all 12 tasks landed on `phase-1-monolith`, and the phase was
+re-verified on 2026-09-02 at `29727cc` after the house-style retrofit of
+`docs/06-code-standards.md`. The workspace gate is green (630 tests, coverage 97–100% on
+every package against an 80% floor) and the Playwright journey passes 2/2 under real
+`docker compose`. That last run first failed for an unrelated reason — a root `prepare`
+script broke the api image build — which is recorded in `docs/evidence/phase-1/` and in
+the phase report at `docs/phases/phase-1.md`. Phases 2–9 remain DRAFT, pending approval at
+their own kickoff per the branch-per-phase workflow above.*
