@@ -1,0 +1,53 @@
+# Isolated verification stack. Layered on top of the committed compose file so
+# the Playwright journey runs against real container images without touching a
+# dev stack on the committed ports, or the protected host ports 3000/3001/5432.
+#
+#   docker compose -p snapscale-verify -f docker-compose.yml -f docker-compose.verify.yml up -d --build
+#   E2E_WEB_URL=http://localhost:5174 \
+#   E2E_API_URL=http://localhost:4001 \
+#   E2E_MAILHOG_URL=http://localhost:8026 \
+#     pnpm --filter @snapscale/e2e exec playwright test
+#   docker compose -p snapscale-verify -f docker-compose.yml -f docker-compose.verify.yml down -v
+#
+# Host port map: postgres 5434, mailhog 1026/8026, api 4001, web 5174.
+#
+# `!override` on every `ports` key: compose *appends* sequences across files, so
+# without it each service would keep binding the committed port as well and
+# collide with the very stack this file exists to avoid.
+
+# Consumed by both `api` and `migrate` so the two can never disagree about the
+# browser origin, the way the base file's x-api-env does (a YAML anchor cannot
+# cross files, hence the restatement).
+x-verify-api-env: &verify-api-env
+  # Must match the host-mapped web port below: the api's CORS allowlist is
+  # exactly this one origin, so a mismatch fails every browser call.
+  WEB_ORIGIN: "http://localhost:5174"
+
+services:
+  postgres:
+    ports: !override
+      - "5434:5432"
+
+  mailhog:
+    ports: !override
+      - "1026:1025"
+      - "8026:8025"
+
+  migrate:
+    environment:
+      <<: *verify-api-env
+
+  api:
+    ports: !override
+      - "4001:4000"
+    environment:
+      <<: *verify-api-env
+
+  web:
+    build:
+      args:
+        # Vite inlines this at build time, so the remapped api port has to be
+        # baked into this image rather than set as a runtime env var.
+        VITE_API_URL: "http://localhost:4001"
+    ports: !override
+      - "5174:5173"
